@@ -90,7 +90,7 @@ async function normalizeSourceForModel(source) {
   return source;
 }
 
-function createBackgroundRemovalControllerLegacy() {
+function createBackgroundRemovalControllerRuntime() {
   let removeBackgroundFn = null;
   let preloadFn = null;
   let loadingPromise = null;
@@ -218,7 +218,7 @@ function createBackgroundRemovalControllerLegacy() {
  */
 class BackgroundRemovalController {
   constructor() {
-    this.impl = createBackgroundRemovalControllerLegacy();
+    this.impl = createBackgroundRemovalControllerRuntime();
   }
 
   /**

@@ -17,7 +17,7 @@ function rotatePoint(pointX, pointY, pivotX, pivotY, radians) {
   };
 }
 
-function createRotateControllerLegacy({
+function createRotateControllerRuntime({
   state,
   stage,
   rotateHandle,
@@ -412,7 +412,7 @@ class RotateController {
    * @param {Object} deps
    */
   constructor(deps) {
-    this.impl = createRotateControllerLegacy(deps);
+    this.impl = createRotateControllerRuntime(deps);
   }
 
   /** @return {void} */

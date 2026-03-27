@@ -7,8 +7,8 @@ import {
   moveLayerWithChildren,
   setSelectedLayer,
   syncLayerParentingForLayer,
-} from "./layers.js";
-import { state } from "./state.js";
+} from "../../core/LayerStore.js";
+import { state } from "../../core/EditorStateStore.js";
 
 function getStagePoint(viewport, clientX, clientY) {
   const zoom = Math.max(0.001, viewport.zoom || 1);
@@ -100,7 +100,7 @@ function resizeSelectionRect(start, handle, deltaX, deltaY) {
   };
 }
 
-function attachDragSelectionLegacy({
+function attachDragSelectionRuntime({
   stage,
   marquee,
   refresh,
@@ -467,7 +467,7 @@ class DragSelectionController {
    * @return {void}
    */
   attach() {
-    attachDragSelectionLegacy(this.options);
+    attachDragSelectionRuntime(this.options);
   }
 }
 

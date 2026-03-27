@@ -7,7 +7,7 @@ function normalizeHexColor(value, fallback = "#000000") {
   return withHash.toUpperCase();
 }
 
-function createShadowToolsLegacy({
+function createShadowToolsRuntime({
   getLayerById,
   getLayerShadowStyle,
   refresh,
@@ -218,7 +218,7 @@ class ShadowToolsController {
    * @param {Object} deps
    */
   constructor(deps) {
-    this.impl = createShadowToolsLegacy(deps);
+    this.impl = createShadowToolsRuntime(deps);
   }
 
   applyShadowSelection(selectedLayerId) {

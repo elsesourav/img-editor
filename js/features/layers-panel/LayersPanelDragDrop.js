@@ -98,7 +98,7 @@ function moveLayerToRoot(state, getDescendantLayerIds, draggedId) {
   return true;
 }
 
-function attachLayersPanelDragAndDropLegacy({
+function attachLayersPanelDragAndDropRuntime({
   item,
   layerId,
   layersList,
@@ -213,7 +213,7 @@ class LayersPanelDnDController {
    * @return {void}
    */
   attach() {
-    attachLayersPanelDragAndDropLegacy(this.options);
+    attachLayersPanelDragAndDropRuntime(this.options);
   }
 }
 

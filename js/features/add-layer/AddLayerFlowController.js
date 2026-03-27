@@ -109,7 +109,7 @@ function hasImageFiles(dataTransfer) {
   );
 }
 
-function createAddLayerFlowControllerLegacy({
+function createAddLayerFlowControllerRuntime({
   state,
   openAddLayerPopup,
   createLayer,
@@ -257,7 +257,7 @@ class AddLayerFlowController {
    * @param {Object} deps
    */
   constructor(deps) {
-    this.impl = createAddLayerFlowControllerLegacy(deps);
+    this.impl = createAddLayerFlowControllerRuntime(deps);
   }
 
   /**

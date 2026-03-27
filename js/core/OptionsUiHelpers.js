@@ -124,7 +124,9 @@ class OptionsUiHelpers {
     grid.className = "metrics-grid";
 
     for (const item of items) {
-      grid.appendChild(OptionsUiHelpers.createMetricField(item.label, item.input));
+      grid.appendChild(
+        OptionsUiHelpers.createMetricField(item.label, item.input),
+      );
     }
 
     return grid;

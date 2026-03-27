@@ -241,7 +241,11 @@ export function buildObjectStrokeFilterChain(strokeSize, strokeColor) {
   ].join(" ");
 }
 
-export function bakeObjectStrokeIntoCanvas(sourceCanvas, strokeSize, strokeColor) {
+export function bakeObjectStrokeIntoCanvas(
+  sourceCanvas,
+  strokeSize,
+  strokeColor,
+) {
   const filterChain = buildObjectStrokeFilterChain(strokeSize, strokeColor);
   if (!filterChain) return sourceCanvas;
 

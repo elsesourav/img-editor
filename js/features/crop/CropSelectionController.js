@@ -6,8 +6,8 @@ import {
   isLayerDescendantOf,
   setSelectedLayer,
   syncLayerParentingForLayer,
-} from "./layers.js";
-import { state } from "./state.js";
+} from "../../core/LayerStore.js";
+import { state } from "../../core/EditorStateStore.js";
 
 function getStagePoint(viewport, clientX, clientY) {
   const zoom = Math.max(0.001, viewport.zoom || 1);
@@ -39,7 +39,7 @@ function layerContainsPoint(layer, x, y) {
   );
 }
 
-function attachCropSelectionLegacy({ stage, refresh, onCommit = () => {} }) {
+function attachCropSelectionRuntime({ stage, refresh, onCommit = () => {} }) {
   let dragCrop = null;
   let dragAll = null;
   let activePointerId = null;
@@ -529,7 +529,7 @@ class CropSelectionController {
    * @return {void}
    */
   attach() {
-    attachCropSelectionLegacy(this.options);
+    attachCropSelectionRuntime(this.options);
   }
 }
 

@@ -309,7 +309,7 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function openAddLayerPopupLegacy({
+function openAddLayerPopupRuntime({
   presetImages = [],
   startup = false,
   templateDefaults = { width: 1200, height: 800 },
@@ -617,7 +617,7 @@ class AddLayerPopup {
    * @return {Promise<any|null>}
    */
   static async open(options = {}) {
-    return openAddLayerPopupLegacy(options);
+    return openAddLayerPopupRuntime(options);
   }
 }
 

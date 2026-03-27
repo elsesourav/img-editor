@@ -204,7 +204,7 @@ function isTargetCapableFormat(formatKey) {
   return FORMAT_CONFIG[formatKey]?.isLossy === true;
 }
 
-function openExportPopupLegacy({ width, height }) {
+function openExportPopupRuntime({ width, height }) {
   ensureStyles();
 
   return new Promise((resolve) => {
@@ -495,7 +495,7 @@ class ExportPopup {
    * @return {Promise<any|null>}
    */
   static async open(options) {
-    return openExportPopupLegacy(options);
+    return openExportPopupRuntime(options);
   }
 }
 

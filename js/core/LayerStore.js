@@ -1,5 +1,113 @@
-import { getRotatedBoundingRect } from "./rotation-geometry.js";
-import { nextLayerId, state } from "./state.js";
+import { getRotatedBoundingRect } from "./RotationGeometry.js";
+import { nextLayerId, state } from "./EditorStateStore.js";
+
+/**
+ * @typedef {Object} LayerFilters
+ * @property {number} brightness
+ * @property {number} contrast
+ * @property {number} saturate
+ * @property {number} hue
+ * @property {number} grayscale
+ * @property {number} sepia
+ * @property {number} invert
+ * @property {number} blur
+ * @property {number} temp
+ * @property {number} tint
+ * @property {number} exposure
+ * @property {number} highlights
+ * @property {number} shadows
+ * @property {number} whites
+ * @property {number} blacks
+ * @property {number} texture
+ * @property {number} clarity
+ * @property {number} dehaze
+ * @property {number} saturation
+ * @property {number} sharpness
+ * @property {number} noise
+ * @property {number} moire
+ * @property {number} defringe
+ * @property {number} shadowX
+ * @property {number} shadowY
+ * @property {number} shadowBlur
+ * @property {number} shadowOpacity
+ * @property {string} shadowColor
+ * @property {number} backgroundBlurAmount
+ */
+
+/**
+ * @typedef {Object} LayerCornerRadius
+ * @property {number} [all]
+ * @property {number} [lt]
+ * @property {number} [rt]
+ * @property {number} [rb]
+ * @property {number} [lb]
+ */
+
+/**
+ * @typedef {Object} ResolvedLayerCornerRadius
+ * @property {number} lt
+ * @property {number} rt
+ * @property {number} rb
+ * @property {number} lb
+ * @property {number|null} all
+ * @property {string} css
+ */
+
+/**
+ * @typedef {Object} LayerShadowStyle
+ * @property {boolean} enabled
+ * @property {string} mode
+ * @property {string} resolvedMode
+ * @property {number} x
+ * @property {number} y
+ * @property {number} blur
+ * @property {number} opacity
+ * @property {string} color
+ * @property {number} strokeSize
+ * @property {string} strokeColor
+ * @property {string} cssColor
+ */
+
+/**
+ * @typedef {Object} LayerInsetShadow
+ * @property {number} x
+ * @property {number} y
+ * @property {number} blur
+ * @property {number} opacity
+ * @property {string} color
+ * @property {string} cssColor
+ */
+
+/**
+ * @typedef {Object} LayerBorderPreview
+ * @property {string} layerId
+ * @property {number} size
+ * @property {string} color
+ */
+
+/**
+ * @typedef {Object} LayerEntity
+ * @property {string} id
+ * @property {string} src
+ * @property {number} x
+ * @property {number} y
+ * @property {number} width
+ * @property {number} height
+ * @property {string|null} parentId
+ * @property {number} zOrder
+ * @property {string} cropBackgroundColor
+ * @property {string} cropBackgroundMode
+ * @property {number} rotation
+ * @property {LayerCornerRadius|number} cornerRadius
+ * @property {LayerShadowStyle} shadowStyle
+ * @property {LayerFilters} filters
+ */
+
+/**
+ * @typedef {Object} DuplicateLayerOptions
+ * @property {number} [offsetX]
+ * @property {number} [offsetY]
+ */
 
 const DEFAULT_LAYER_FILTERS = Object.freeze({
   brightness: 100,
@@ -54,6 +162,12 @@ function normalizeHexColor(value, fallback = "#000000") {
   return withHash.toUpperCase();
 }
 
+/**
+ * Sets the active border preview overlay for a single layer.
+ *
+ * @param {LayerBorderPreview|null|undefined} preview
+ * @returns {void}
+ */
 export function setLayerBorderPreview(preview) {
   if (!preview || !preview.layerId) {
     activeLayerBorderPreview = null;
@@ -89,6 +203,12 @@ function normalizeCornerRadiusValue(value, maxRadius) {
   return clamp(numeric, 0, maxRadius);
 }
 
+/**
+ * Resolves layer corner radius values into normalized per-corner values.
+ *
+ * @param {LayerEntity|null|undefined} layer
+ * @returns {ResolvedLayerCornerRadius}
+ */
 export function getLayerCornerRadius(layer) {
   const maxRadius =
     Math.max(
@@ -131,6 +251,12 @@ export function getLayerCornerRadius(layer) {
   };
 }
 
+/**
+ * Normalizes and writes a concrete corner radius object back to the layer.
+ *
+ * @param {LayerEntity|null|undefined} layer
+ * @returns {void}
+ */
 export function ensureLayerCornerRadius(layer) {
   if (!layer) return;
   const radius = getLayerCornerRadius(layer);
@@ -142,6 +268,12 @@ export function ensureLayerCornerRadius(layer) {
   };
 }
 
+/**
+ * Returns a normalized object shadow style for UI and render pipelines.
+ *
+ * @param {LayerEntity|null|undefined} layer
+ * @returns {LayerShadowStyle}
+ */
 export function getLayerShadowStyle(layer) {
   const current = layer?.shadowStyle || {};
   const color = normalizeHexColor(current.color, "#000000");
@@ -165,6 +297,12 @@ export function getLayerShadowStyle(layer) {
   };
 }
 
+/**
+ * Applies filter defaults and value clamping to a layer in-place.
+ *
+ * @param {LayerEntity|null|undefined} layer
+ * @returns {void}
+ */
 export function ensureLayerFilterDefaults(layer) {
   if (!layer) return;
 
@@ -207,10 +345,21 @@ export function ensureLayerFilterDefaults(layer) {
   };
 }
 
+/**
+ * Creates a fresh filter object using editor defaults.
+ *
+ * @returns {LayerFilters}
+ */
 export function getDefaultLayerFilters() {
   return { ...DEFAULT_LAYER_FILTERS };
 }
 
+/**
+ * Builds a CSS filter string from normalized layer filters.
+ *
+ * @param {LayerEntity|null|undefined} layer
+ * @returns {string}
+ */
 export function buildLayerFilterString(layer) {
   ensureLayerFilterDefaults(layer);
   const filters = layer?.filters || DEFAULT_LAYER_FILTERS;
@@ -283,6 +432,12 @@ export function buildLayerFilterString(layer) {
   return parts.length ? parts.join(" ") : "none";
 }
 
+/**
+ * Returns normalized inset shadow settings for a layer.
+ *
+ * @param {LayerEntity|null|undefined} layer
+ * @returns {LayerInsetShadow}
+ */
 export function getLayerInsetShadow(layer) {
   ensureLayerFilterDefaults(layer);
   const filters = layer.filters;
@@ -353,6 +508,13 @@ function isDescendantOf(layerId, ancestorId) {
   return false;
 }
 
+/**
+ * Checks whether a layer is a descendant of another layer.
+ *
+ * @param {string|null|undefined} layerId
+ * @param {string|null|undefined} ancestorId
+ * @returns {boolean}
+ */
 export function isLayerDescendantOf(layerId, ancestorId) {
   return isDescendantOf(layerId, ancestorId);
 }
@@ -366,6 +528,12 @@ function collectDescendantIds(layerId, output = new Set()) {
   return output;
 }
 
+/**
+ * Collects all descendant layer ids for a given layer.
+ *
+ * @param {string} layerId
+ * @returns {string[]}
+ */
 export function getDescendantLayerIds(layerId) {
   return [...collectDescendantIds(layerId)];
 }
@@ -389,6 +557,14 @@ function compareLayersForPaint(a, b) {
   return (a.zOrder ?? 0) - (b.zOrder ?? 0);
 }
 
+/**
+ * Moves a layer and its descendants by an offset.
+ *
+ * @param {string} layerId
+ * @param {number} deltaX
+ * @param {number} deltaY
+ * @returns {void}
+ */
 export function moveLayerWithChildren(layerId, deltaX, deltaY) {
   if (deltaX === 0 && deltaY === 0) return;
 
@@ -424,6 +600,12 @@ export function moveLayerWithChildren(layerId, deltaX, deltaY) {
   }
 }
 
+/**
+ * Re-evaluates parent assignment rules for one layer.
+ *
+ * @param {string} layerId
+ * @returns {void}
+ */
 export function syncLayerParentingForLayer(layerId) {
   const child = getLayerById(layerId);
   if (!child) return;
@@ -494,10 +676,21 @@ export function syncLayerParentingForLayer(layerId) {
   child.parentId = bestParent ? bestParent.id : null;
 }
 
+/**
+ * Returns direct children for a parent layer id.
+ *
+ * @param {string} parentId
+ * @returns {LayerEntity[]}
+ */
 export function getLayerChildren(parentId) {
   return state.layers.filter((layer) => layer.parentId === parentId);
 }
 
+/**
+ * Returns all top-level layers.
+ *
+ * @returns {LayerEntity[]}
+ */
 export function getRootLayers() {
   return state.layers.filter((layer) => !layer.parentId);
 }
@@ -776,6 +969,14 @@ function buildLayerInsetShadowOverlay(
   return overlay;
 }
 
+/**
+ * Creates a new layer object using default editor properties.
+ *
+ * @param {string} src
+ * @param {number} [width=420]
+ * @param {number} [height=300]
+ * @returns {LayerEntity}
+ */
 export function createLayer(src, width = 420, height = 300) {
   return {
     id: nextLayerId(),
@@ -810,6 +1011,12 @@ export function createLayer(src, width = 420, height = 300) {
   };
 }
 
+/**
+ * Renders all current layers into the target root element.
+ *
+ * @param {HTMLElement} layerRoot
+ * @returns {void}
+ */
 export function renderLayers(layerRoot) {
   layerRoot.innerHTML = "";
 
@@ -845,24 +1052,54 @@ export function renderLayers(layerRoot) {
   }
 }
 
+/**
+ * Finds a layer by id.
+ *
+ * @param {string|null|undefined} id
+ * @returns {LayerEntity|null}
+ */
 export function getLayerById(id) {
   return state.layers.find((layer) => layer.id === id) || null;
 }
 
+/**
+ * Moves a layer above all others.
+ *
+ * @param {string} id
+ * @returns {void}
+ */
 export function bringLayerToFront(id) {
   const layer = getLayerById(id);
   if (!layer) return;
   layer.zOrder = getMaxZOrder() + 1;
 }
 
+/**
+ * Returns layers ordered from front to back for UI display.
+ *
+ * @returns {LayerEntity[]}
+ */
 export function getLayersByZOrderDesc() {
   return [...state.layers].sort((a, b) => compareLayersForPaint(b, a));
 }
 
+/**
+ * Updates selected layer id in global state.
+ *
+ * @param {string|null|undefined} id
+ * @returns {void}
+ */
 export function setSelectedLayer(id) {
   state.selectedLayerId = id;
 }
 
+/**
+ * Renames a layer with whitespace normalization.
+ *
+ * @param {string} layerId
+ * @param {string} nextName
+ * @returns {void}
+ */
 export function setLayerName(layerId, nextName) {
   const layer = getLayerById(layerId);
   if (!layer) return;
@@ -871,6 +1108,12 @@ export function setLayerName(layerId, nextName) {
   layer.name = normalized || layer.id;
 }
 
+/**
+ * Deletes a layer and all of its descendants.
+ *
+ * @param {string} layerId
+ * @returns {void}
+ */
 export function deleteLayerWithDescendants(layerId) {
   const idsToDelete = new Set([layerId, ...collectDescendantIds(layerId)]);
   state.layers = state.layers.filter((layer) => !idsToDelete.has(layer.id));
@@ -887,6 +1130,13 @@ export function deleteLayerWithDescendants(layerId) {
   }
 }
 
+/**
+ * Duplicates a layer subtree and offsets the cloned nodes.
+ *
+ * @param {string} layerId
+ * @param {DuplicateLayerOptions} [options]
+ * @returns {string|null}
+ */
 export function duplicateLayerWithDescendants(
   layerId,
   { offsetX = 24, offsetY = 24 } = {},

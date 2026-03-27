@@ -51,7 +51,7 @@ function buildFontFamilyOptions() {
   );
 }
 
-function createTextToolsLegacy({
+function createTextToolsRuntime({
   createLayer,
   state,
   setSelectedLayer,
@@ -623,7 +623,7 @@ class TextToolsController {
    * @param {Object} deps
    */
   constructor(deps) {
-    this.impl = createTextToolsLegacy(deps);
+    this.impl = createTextToolsRuntime(deps);
   }
 
   async createTextLayer() {
