@@ -1141,7 +1141,8 @@ class EditorApplication {
 
         if (exportOptions.action === "save-template") {
           if (!customTemplateController) return;
-          const saveResult = await customTemplateController.saveCurrentTemplate();
+          const saveResult =
+            await customTemplateController.saveCurrentTemplate();
           if (saveResult?.saved) {
             showTemplateToast("Template saved successfully");
             return;
@@ -1590,7 +1591,8 @@ class EditorApplication {
       if (!templateSession.bindings.some((binding) => !binding.locked)) {
         const lockedInfo = document.createElement("p");
         lockedInfo.className = "template-note";
-        lockedInfo.textContent = "All template layers are locked. No editable inputs for this template.";
+        lockedInfo.textContent =
+          "All template layers are locked. No editable inputs for this template.";
         const lockedInfoRow = createOptionRow("", lockedInfo);
         lockedInfoRow.classList.add("full");
         optionsPanel.appendChild(lockedInfoRow);
