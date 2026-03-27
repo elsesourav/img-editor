@@ -24,12 +24,13 @@ function createShadowToolsRuntime({
       enabled: false,
       mode: "object",
       x: 0,
-      y: 8,
-      blur: 16,
+      y: 0,
+      blur: 5,
       opacity: 45,
       color: "#000000",
       strokeSize: 0,
       strokeColor: "#000000",
+      strokeOpacity: 100,
     };
   }
 
@@ -53,6 +54,9 @@ function createShadowToolsRuntime({
         ? Math.max(0, Number(current.strokeSize))
         : defaults.strokeSize,
       strokeColor: normalizeHexColor(current.strokeColor, defaults.strokeColor),
+      strokeOpacity: Number.isFinite(Number(current.strokeOpacity))
+        ? Math.max(0, Math.min(100, Number(current.strokeOpacity)))
+        : defaults.strokeOpacity,
     };
   }
 
@@ -185,6 +189,8 @@ function createShadowToolsRuntime({
       refresh({ rerenderOptions: false, rerenderLayersPanel: false });
     });
     optionsPanel.appendChild(createOptionRow("Stroke Color", strokeColorInput));
+
+    addShadowControl("BG Opacity", "strokeOpacity", 0, 100, 1);
 
     appendOptionDivider();
 

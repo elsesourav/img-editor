@@ -12,6 +12,10 @@
   display: none;
 }
 
+:root {
+  --option-row-w: 50px;
+}
+
 html,
 body {
   margin: 0;
@@ -566,8 +570,8 @@ body.template-mode #upscaleAction {
 
 .filter-control {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) var(--option-row-w);
+  gap: 6px;
   align-items: center;
 }
 
@@ -582,6 +586,29 @@ body.template-mode #upscaleAction {
   color: rgba(228, 228, 231, 0.82);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.filter-value-input {
+  width: var(--option-row-w);
+  min-width: var(--option-row-w);
+  max-width: var(--option-row-w);
+  height: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e4e4e7;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 2px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.filter-value-input::-webkit-outer-spin-button,
+.filter-value-input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 .option-divider {

@@ -299,7 +299,7 @@ export async function buildUpscaleSourceDrawable(layer, getLayerShadowStyle) {
     drawable: bakeObjectStrokeIntoCanvas(
       base,
       shadowStyle.strokeSize,
-      shadowStyle.strokeColor,
+      shadowStyle.strokeCssColor || shadowStyle.strokeColor,
     ),
     bakedStroke: true,
   };

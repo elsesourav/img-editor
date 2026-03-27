@@ -311,6 +311,7 @@ function escapeHtml(value) {
 
 function openAddLayerPopupRuntime({
   presetImages = [],
+  customTemplates = [],
   startup = false,
   templateDefaults = { width: 1200, height: 800 },
   templateColorPresets = DEFAULT_TEMPLATE_COLORS,
@@ -324,6 +325,17 @@ function openAddLayerPopupRuntime({
           <button type="button" class="add-layer-preset" data-role="preset" data-index="${index}">
             <img src="${escapeHtml(preset.src)}" alt="${escapeHtml(preset.label)}" loading="lazy" />
             <span>${escapeHtml(preset.label)}</span>
+          </button>
+        `,
+      )
+      .join("");
+
+    const customTemplateCards = customTemplates
+      .map(
+        (template, index) => `
+          <button type="button" class="add-layer-preset" data-role="custom-template" data-index="${index}">
+            ${template.thumb ? `<img src="${escapeHtml(template.thumb)}" alt="${escapeHtml(template.name)}" loading="lazy" />` : '<div style="height:88px;display:grid;place-items:center;border-bottom:1px solid rgba(255,255,255,0.14);font-size:11px;color:rgba(228,228,231,0.7);">Template</div>'}
+            <span>${escapeHtml(template.name)}</span>
           </button>
         `,
       )
@@ -355,6 +367,19 @@ function openAddLayerPopupRuntime({
       <div class="add-layer-popup" role="dialog" aria-modal="true" aria-label="Add layer options">
         <h3 class="add-layer-title">${startup ? "Start Project" : "Add Layer"}</h3>
         <p class="add-layer-subtitle">Create a base layer, choose a preset, or import one or more images at once.</p>
+
+        ${
+          startup && customTemplates.length
+            ? `
+          <div class="add-layer-group">
+            <h4 class="add-layer-group-title">Your Saved Templates</h4>
+            <div class="add-layer-presets">
+              ${customTemplateCards}
+            </div>
+          </div>
+        `
+            : ""
+        }
 
         <div class="add-layer-group">
           <h4 class="add-layer-group-title">Import Images</h4>
@@ -597,6 +622,20 @@ function openAddLayerPopupRuntime({
         });
       });
     });
+
+    overlay
+      .querySelectorAll('[data-role="custom-template"]')
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const index = Number(button.getAttribute("data-index"));
+          const template = customTemplates[index];
+          if (!template?.id) return;
+          close({
+            type: "custom-template",
+            templateId: template.id,
+          });
+        });
+      });
 
     cancelBtn.addEventListener("click", () => close(null));
     overlay.addEventListener("click", (event) => {

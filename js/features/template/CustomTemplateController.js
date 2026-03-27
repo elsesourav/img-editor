@@ -151,12 +151,13 @@ function toLayerSnapshot(layer, isLocked = false) {
       enabled: false,
       mode: "object",
       x: 0,
-      y: 8,
-      blur: 16,
+      y: 0,
+      blur: 5,
       opacity: 45,
       color: "#000000",
       strokeSize: 0,
       strokeColor: "#000000",
+      strokeOpacity: 100,
     },
     appliedBorder: layer.appliedBorder ? cloneValue(layer.appliedBorder) : null,
     filters: cloneValue(layer.filters) || null,
@@ -567,6 +568,7 @@ function createControllerRuntime({
   return {
     saveCurrentTemplate,
     pickTemplate,
+    getTemplateById,
     applyTemplate,
     applyImageFileToLayer,
     applyTextContentToLayer,
@@ -596,6 +598,14 @@ class CustomTemplateController {
    */
   async pickTemplate() {
     return this.impl.pickTemplate();
+  }
+
+  /**
+   * @param {string} templateId
+   * @return {any|null}
+   */
+  getTemplateById(templateId) {
+    return this.impl.getTemplateById(templateId);
   }
 
   /**

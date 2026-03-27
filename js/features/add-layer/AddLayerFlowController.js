@@ -13,6 +13,8 @@ const TEMPLATE_COLOR_PRESETS = [
   "#6B7280",
 ];
 
+const CUSTOM_TEMPLATE_STORAGE_KEY = "img-editor.custom-templates.v1";
+
 const PRESET_IMAGES = [
   {
     label: "Street Portrait",
@@ -120,7 +122,30 @@ function createAddLayerFlowControllerRuntime({
   loadImage,
   refresh,
   commitHistory,
+  onSelectCustomTemplateFromStartup,
 }) {
+  function listSavedCustomTemplates() {
+    try {
+      const raw = localStorage.getItem(CUSTOM_TEMPLATE_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .filter((template) => template && template.id)
+        .map((template) => ({
+          id: String(template.id),
+          name: String(template.name || "Custom Template"),
+          thumb: template.thumb ? String(template.thumb) : null,
+          createdAt: Number(template.createdAt) || 0,
+        }))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 12);
+    } catch {
+      return [];
+    }
+  }
+
   function getPresetTemplateSize() {
     const first = PRESET_IMAGES[0];
     return {
@@ -206,6 +231,7 @@ function createAddLayerFlowControllerRuntime({
   async function openFlow({ startup = false } = {}) {
     const result = await openAddLayerPopup({
       presetImages: PRESET_IMAGES,
+      customTemplates: startup ? listSavedCustomTemplates() : [],
       startup,
       templateDefaults: getPresetTemplateSize(),
       templateColorPresets: TEMPLATE_COLOR_PRESETS,
@@ -225,6 +251,14 @@ function createAddLayerFlowControllerRuntime({
 
     if (result.type === "import-files") {
       await addImportedLayers(result.files || []);
+      return;
+    }
+
+    if (
+      result.type === "custom-template" &&
+      typeof onSelectCustomTemplateFromStartup === "function"
+    ) {
+      await onSelectCustomTemplateFromStartup(result.templateId);
     }
   }
 

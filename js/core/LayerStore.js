@@ -148,20 +148,29 @@ export function getLayerShadowStyle(layer) {
   const strokeColor = normalizeHexColor(current.strokeColor, "#000000");
   const opacity = normalizeFilterNumber(current.opacity, 45, 0, 100);
   const strokeSize = normalizeFilterNumber(current.strokeSize, 0, 0, 64);
+  const strokeOpacity = normalizeFilterNumber(
+    current.strokeOpacity,
+    100,
+    0,
+    100,
+  );
   const rgb = hexToRgb(color);
+  const strokeRgb = hexToRgb(strokeColor);
 
   return {
     enabled: Boolean(current.enabled),
     mode: "object",
     resolvedMode: "object",
     x: normalizeFilterNumber(current.x, 0, -200, 200),
-    y: normalizeFilterNumber(current.y, 8, -200, 200),
-    blur: normalizeFilterNumber(current.blur, 16, 0, 200),
+    y: normalizeFilterNumber(current.y, 0, -200, 200),
+    blur: normalizeFilterNumber(current.blur, 5, 0, 200),
     opacity,
     color,
     strokeSize,
     strokeColor,
+    strokeOpacity,
     cssColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(opacity / 100, 0, 1)})`,
+    strokeCssColor: `rgba(${strokeRgb.r}, ${strokeRgb.g}, ${strokeRgb.b}, ${clamp(strokeOpacity / 100, 0, 1)})`,
   };
 }
 
@@ -724,7 +733,7 @@ function buildLayerImage(layer, bounds, { usePreviewFill = false } = {}) {
   if (layerShadow.enabled && layerShadow.resolvedMode === "object") {
     if (layerShadow.strokeSize > 0) {
       const s = layerShadow.strokeSize;
-      const c = layerShadow.strokeColor;
+      const c = layerShadow.strokeCssColor;
       filterParts.push(`drop-shadow(${s}px 0 0 ${c})`);
       filterParts.push(`drop-shadow(${-s}px 0 0 ${c})`);
       filterParts.push(`drop-shadow(0 ${s}px 0 ${c})`);
@@ -823,12 +832,13 @@ export function createLayer(src, width = 420, height = 300) {
       enabled: false,
       mode: "object",
       x: 0,
-      y: 8,
-      blur: 16,
+      y: 0,
+      blur: 5,
       opacity: 45,
       color: "#000000",
       strokeSize: 0,
       strokeColor: "#000000",
+      strokeOpacity: 100,
     },
     filters: getDefaultLayerFilters(),
   };

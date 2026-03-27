@@ -156,6 +156,8 @@ class EditorApplication {
       templateId: null,
       templateName: "",
       bindings: [],
+      batchImageLayerId: null,
+      batchImageUploads: [],
     };
 
     const viewportController = createEditorViewportController({
@@ -1092,41 +1094,159 @@ class EditorApplication {
     async function exportSelectedImage() {
       if (isExporting) return;
 
-      const selected = getLayerById(state.selectedLayerId);
-      const allLayers = [...state.layers];
-      if (!selected && !allLayers.length) return;
+      const buildExportSnapshot = () => {
+        const selectedLayer = getLayerById(state.selectedLayerId);
+        const allLayers = [...state.layers];
+        if (!selectedLayer && !allLayers.length) {
+          return null;
+        }
 
-      const exportLayers = selected
-        ? getExportLayersForSelection(selected)
-        : getLayersByZOrderDesc().reverse();
-      if (!exportLayers.length) return;
+        const exportLayers = selectedLayer
+          ? getExportLayersForSelection(selectedLayer)
+          : getLayersByZOrderDesc().reverse();
+        if (!exportLayers.length) {
+          return null;
+        }
 
-      const baseLayer = selected || exportLayers[0];
-      const allBounds = getBoundingRectForLayers(exportLayers);
-      if (!baseLayer || !allBounds) return;
+        const baseLayer = selectedLayer || exportLayers[0];
+        const allBounds = getBoundingRectForLayers(exportLayers);
+        if (!baseLayer || !allBounds) {
+          return null;
+        }
 
-      const cropToExport =
-        selected &&
-        state.mode === "crop-select" &&
-        state.cropSelection?.layerId === selected.id
-          ? state.cropSelection
-          : selected
-            ? {
-                x: selected.x,
-                y: selected.y,
-                width: selected.width,
-                height: selected.height,
-              }
-            : allBounds;
+        const cropToExport =
+          selectedLayer &&
+          state.mode === "crop-select" &&
+          state.cropSelection?.layerId === selectedLayer.id
+            ? state.cropSelection
+            : selectedLayer
+              ? {
+                  x: selectedLayer.x,
+                  y: selectedLayer.y,
+                  width: selectedLayer.width,
+                  height: selectedLayer.height,
+                }
+              : allBounds;
+
+        return {
+          selectedLayer,
+          exportLayers,
+          baseLayer,
+          cropToExport,
+        };
+      };
+
+      const getTemplateBatchExportState = () => {
+        if (!templateSession.active) return null;
+        if (!templateSession.batchImageLayerId) return null;
+        if ((templateSession.batchImageUploads || []).length < 2) return null;
+
+        const editableImageBindings = templateSession.bindings.filter(
+          (binding) => !binding.locked && binding.kind === "image",
+        );
+        if (editableImageBindings.length !== 1) return null;
+
+        const binding = editableImageBindings[0];
+        if (binding.layerId !== templateSession.batchImageLayerId) return null;
+
+        const layer = getLayerById(binding.layerId);
+        if (!layer) return null;
+
+        return {
+          layer,
+          uploads: templateSession.batchImageUploads,
+        };
+      };
+
+      const exportBatchTemplateImages = async (exportOptions) => {
+        const batchState = getTemplateBatchExportState();
+        if (!batchState) return false;
+
+        const originalLayer = {
+          src: batchState.layer.src,
+          width: batchState.layer.width,
+          height: batchState.layer.height,
+        };
+
+        try {
+          for (let index = 0; index < batchState.uploads.length; index += 1) {
+            const upload = batchState.uploads[index];
+            batchState.layer.src = upload.src;
+            batchState.layer.width = Math.max(MIN_LAYER_SIZE, upload.width);
+            batchState.layer.height = Math.max(MIN_LAYER_SIZE, upload.height);
+
+            const snapshot = buildExportSnapshot();
+            if (!snapshot) continue;
+
+            const { canvas } = await renderCompositeLayersToCanvas(
+              snapshot.baseLayer,
+              snapshot.exportLayers,
+              snapshot.cropToExport,
+              {
+                fillBackground: false,
+              },
+            );
+
+            const finalCanvas = resizeCanvasWithQuality(
+              canvas,
+              canvas.width,
+              canvas.height,
+            );
+
+            const isTargetMode = exportOptions.mode === "target";
+            const isLossyFormat = exportOptions.format !== "png";
+            const exportResult =
+              isTargetMode && isLossyFormat
+                ? await encodeByTargetSize(
+                    finalCanvas,
+                    exportOptions.targetBytes,
+                    exportOptions.format,
+                  )
+                : await encodeByQualityPreset(
+                    finalCanvas,
+                    exportOptions.qualityPreset,
+                    exportOptions.format,
+                  );
+
+            const sourceName = String(upload.name || `image-${index + 1}`)
+              .replace(/\.[^.]+$/, "")
+              .replace(/[^a-zA-Z0-9-_ ]+/g, "")
+              .trim()
+              .replace(/\s+/g, "-")
+              .toLowerCase();
+
+            downloadBlob(
+              exportResult.blob,
+              `${sourceName || `image-${index + 1}`}.${exportResult.extension}`,
+            );
+          }
+
+          showTemplateToast(
+            `Downloaded ${batchState.uploads.length} images from template batch`,
+            {
+              durationMs: 2400,
+            },
+          );
+          return true;
+        } finally {
+          batchState.layer.src = originalLayer.src;
+          batchState.layer.width = originalLayer.width;
+          batchState.layer.height = originalLayer.height;
+          refresh({ rerenderOptions: false, rerenderLayersPanel: false });
+        }
+      };
+
+      const snapshot = buildExportSnapshot();
+      if (!snapshot) return;
 
       isExporting = true;
       exportSelected.disabled = true;
 
       try {
         const { canvas } = await renderCompositeLayersToCanvas(
-          baseLayer,
-          exportLayers,
-          cropToExport,
+          snapshot.baseLayer,
+          snapshot.exportLayers,
+          snapshot.cropToExport,
           {
             fillBackground: false,
           },
@@ -1163,6 +1283,11 @@ class EditorApplication {
           return;
         }
 
+        const didExportBatch = await exportBatchTemplateImages(exportOptions);
+        if (didExportBatch) {
+          return;
+        }
+
         const finalCanvas = resizeCanvasWithQuality(
           canvas,
           exportOptions.width,
@@ -1187,8 +1312,8 @@ class EditorApplication {
 
         downloadBlob(
           exportResult.blob,
-          selected
-            ? `selected-${selected.id}.${exportResult.extension}`
+          snapshot.selectedLayer
+            ? `selected-${snapshot.selectedLayer.id}.${exportResult.extension}`
             : `canvas-export.${exportResult.extension}`,
         );
       } catch (error) {
@@ -1340,12 +1465,21 @@ class EditorApplication {
       slider.step = String(step);
       slider.value = String(value);
 
-      const valueLabel = document.createElement("span");
-      valueLabel.className = "filter-value-label";
-      valueLabel.textContent = `${formatValue(value)}${suffix}`;
+      const valueInput = document.createElement("input");
+      valueInput.className = "filter-value-input";
+      valueInput.type = "number";
+      valueInput.min = String(min);
+      valueInput.max = String(max);
+      valueInput.step = String(step);
 
       const displayValue = (nextValue) => {
-        valueLabel.textContent = `${formatValue(nextValue)}${suffix}`;
+        const formatted = String(formatValue(nextValue));
+        valueInput.value = Number.isFinite(Number(formatted))
+          ? formatted
+          : String(nextValue);
+        valueInput.title = suffix
+          ? `${valueInput.value}${suffix}`
+          : valueInput.value;
       };
 
       const syncFrom = (nextValue, shouldCommit) => {
@@ -1367,8 +1501,20 @@ class EditorApplication {
         syncFrom(slider.value, true);
       });
 
+      valueInput.addEventListener("input", () => {
+        syncFrom(valueInput.value, false);
+      });
+      valueInput.addEventListener("change", () => {
+        syncFrom(valueInput.value, true);
+      });
+      valueInput.addEventListener("blur", () => {
+        displayValue(Number(slider.value));
+      });
+
+      displayValue(Number(slider.value));
+
       wrap.appendChild(slider);
-      wrap.appendChild(valueLabel);
+      wrap.appendChild(valueInput);
       return wrap;
     }
 
@@ -1450,6 +1596,8 @@ class EditorApplication {
         templateSession.templateId = null;
         templateSession.templateName = "";
         templateSession.bindings = [];
+        templateSession.batchImageLayerId = null;
+        templateSession.batchImageUploads = [];
       }
 
       document.body.classList.toggle("template-mode", templateSession.active);
@@ -1460,6 +1608,12 @@ class EditorApplication {
 
     function renderTemplateModeOptions() {
       optionsPanel.innerHTML = "";
+
+      const editableImageBindings = templateSession.bindings.filter(
+        (binding) => !binding.locked && binding.kind === "image",
+      );
+      const singleEditableImageBinding =
+        editableImageBindings.length === 1 ? editableImageBindings[0] : null;
 
       const title = document.createElement("div");
       title.className = "option-caption";
@@ -1505,34 +1659,111 @@ class EditorApplication {
         block.appendChild(focusBtn);
 
         if (binding.kind === "image") {
+          const allowBatchUpload =
+            singleEditableImageBinding?.layerId === layer.id;
+
           const imageInput = document.createElement("input");
           imageInput.type = "file";
           imageInput.accept = "image/*";
+          imageInput.multiple = allowBatchUpload;
           imageInput.hidden = true;
 
-          const applyImageFile = (file) => {
-            if (!file || !customTemplateController) return;
+          const readImageFile = (file) =>
+            new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = async () => {
+                const src = String(reader.result || "");
+                try {
+                  const image = await loadImage(src);
+                  resolve({
+                    name: file.name,
+                    src,
+                    width: Math.max(
+                      MIN_LAYER_SIZE,
+                      image.naturalWidth || image.width || layer.width,
+                    ),
+                    height: Math.max(
+                      MIN_LAYER_SIZE,
+                      image.naturalHeight || image.height || layer.height,
+                    ),
+                  });
+                } catch {
+                  resolve({
+                    name: file.name,
+                    src,
+                    width: Math.max(MIN_LAYER_SIZE, layer.width),
+                    height: Math.max(MIN_LAYER_SIZE, layer.height),
+                  });
+                }
+              };
+              reader.onerror = () =>
+                reject(new Error("Failed to read image file"));
+              reader.readAsDataURL(file);
+            });
 
-            void customTemplateController
-              .applyImageFileToLayer(layer.id, file)
-              .then((updated) => {
-                if (!updated) return;
-                refresh({ rerenderOptions: false, rerenderLayersPanel: false });
-                commitHistory();
-              })
-              .catch((error) => {
-                console.error("Template image apply failed", error);
-              });
+          const applyImageFiles = async (files) => {
+            const imageFiles = files.filter((file) =>
+              file.type.startsWith("image/"),
+            );
+            if (!imageFiles.length) return;
+
+            if (!allowBatchUpload || imageFiles.length === 1) {
+              templateSession.batchImageLayerId = null;
+              templateSession.batchImageUploads = [];
+              const file = imageFiles[0];
+              if (!file || !customTemplateController) return;
+
+              void customTemplateController
+                .applyImageFileToLayer(layer.id, file)
+                .then((updated) => {
+                  if (!updated) return;
+                  refresh({
+                    rerenderOptions: true,
+                    rerenderLayersPanel: false,
+                  });
+                  commitHistory();
+                })
+                .catch((error) => {
+                  console.error("Template image apply failed", error);
+                });
+              return;
+            }
+
+            const uploads = [];
+            for (const file of imageFiles) {
+              try {
+                const upload = await readImageFile(file);
+                uploads.push(upload);
+              } catch {
+                // Ignore invalid files.
+              }
+            }
+            if (!uploads.length) return;
+
+            templateSession.batchImageLayerId = layer.id;
+            templateSession.batchImageUploads = uploads;
+
+            layer.src = uploads[0].src;
+            layer.width = uploads[0].width;
+            layer.height = uploads[0].height;
+            refresh({ rerenderOptions: true, rerenderLayersPanel: false });
+            commitHistory();
+            showTemplateToast(
+              `${uploads.length} images added to template batch export`,
+              { durationMs: 2200 },
+            );
           };
 
           imageInput.addEventListener("change", () => {
-            const file = imageInput.files?.[0];
-            applyImageFile(file);
+            const files = Array.from(imageInput.files || []);
+            void applyImageFiles(files);
           });
 
           const dropZone = document.createElement("div");
           dropZone.className = "template-dropzone";
-          dropZone.textContent = "Drop image here or click to upload";
+          dropZone.textContent = allowBatchUpload
+            ? "Drop one or many images here, or click to upload"
+            : "Drop image here or click to upload";
           dropZone.addEventListener("click", () => {
             imageInput.click();
           });
@@ -1546,15 +1777,26 @@ class EditorApplication {
           dropZone.addEventListener("drop", (event) => {
             event.preventDefault();
             dropZone.classList.remove("drag-over");
-            const file = event.dataTransfer?.files?.[0];
-            if (!file || !file.type.startsWith("image/")) return;
-            applyImageFile(file);
+            const files = Array.from(event.dataTransfer?.files || []);
+            if (!files.length) return;
+            void applyImageFiles(files);
           });
 
           const imageRowValue = document.createElement("div");
           imageRowValue.className = "template-upload-control";
           imageRowValue.appendChild(imageInput);
           imageRowValue.appendChild(dropZone);
+
+          const isBatchLayer =
+            templateSession.batchImageLayerId === layer.id &&
+            (templateSession.batchImageUploads || []).length > 1;
+          if (allowBatchUpload && isBatchLayer) {
+            const batchNote = document.createElement("p");
+            batchNote.className = "template-note";
+            batchNote.textContent = `${templateSession.batchImageUploads.length} images queued. Export downloads one output per image.`;
+            imageRowValue.appendChild(batchNote);
+          }
+
           block.appendChild(createOptionRow("Image", imageRowValue));
         }
 
@@ -2384,6 +2626,11 @@ class EditorApplication {
         return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
       };
 
+      const getFixedCropRatioValue = () => {
+        if (!crop.width || !crop.height) return null;
+        return crop.width / Math.max(1, crop.height);
+      };
+
       const applyRatioToCropKeepingTopLeft = () => {
         const ratio = getActiveCropRatio();
         if (!ratio) {
@@ -2448,6 +2695,7 @@ class EditorApplication {
 
       const ratioOptions = [
         { value: "free", label: "Free" },
+        { value: "fixed", label: "Fixed (Current)" },
         { value: "1", label: "1:1" },
         { value: "0.75", label: "3:4" },
         { value: "1.3333333333", label: "4:3" },
@@ -2457,12 +2705,31 @@ class EditorApplication {
         { value: "1.7777777778", label: "16:9" },
       ];
       const activeRatio = getActiveCropRatio();
-      const ratioValue = activeRatio ? String(activeRatio) : "free";
+      const presetRatioValues = ratioOptions
+        .map((item) => item.value)
+        .filter((value) => value !== "free" && value !== "fixed")
+        .map((value) => Number(value));
+      const matchedPreset = activeRatio
+        ? presetRatioValues.find(
+            (value) => Math.abs(value - activeRatio) < 0.000001,
+          )
+        : null;
+      const ratioValue = !activeRatio
+        ? "free"
+        : matchedPreset
+          ? String(matchedPreset)
+          : "fixed";
       const ratioSelect = createSelectInput(
         ratioOptions,
         ratioValue,
         (value) => {
-          state.cropAspectRatio = value === "free" ? null : Number(value);
+          if (value === "free") {
+            state.cropAspectRatio = null;
+          } else if (value === "fixed") {
+            state.cropAspectRatio = getFixedCropRatioValue();
+          } else {
+            state.cropAspectRatio = Number(value);
+          }
           applyRatioToCropKeepingTopLeft();
           refresh();
           commitHistory();
@@ -3478,6 +3745,8 @@ class EditorApplication {
           templateSession.bindings = session.bindings.filter((binding) =>
             Boolean(binding.layerId),
           );
+          templateSession.batchImageLayerId = null;
+          templateSession.batchImageUploads = [];
           setTemplateMode(openMode === "template");
           refresh();
           commitHistory();
@@ -3604,6 +3873,35 @@ class EditorApplication {
       loadImage,
       refresh,
       commitHistory,
+      onSelectCustomTemplateFromStartup: async (templateId) => {
+        if (!customTemplateController || !templateId) {
+          return;
+        }
+
+        const template = customTemplateController.getTemplateById(templateId);
+        if (!template) {
+          return;
+        }
+
+        const session = customTemplateController.applyTemplate(template);
+        if (!session) {
+          return;
+        }
+
+        templateSession.templateId = session.templateId;
+        templateSession.templateName = session.templateName;
+        templateSession.bindings = session.bindings.filter((binding) =>
+          Boolean(binding.layerId),
+        );
+        templateSession.batchImageLayerId = null;
+        templateSession.batchImageUploads = [];
+        setTemplateMode(true);
+        refresh();
+        commitHistory();
+        showTemplateToast("Custom template loaded from startup", {
+          durationMs: 1800,
+        });
+      },
     });
 
     customTemplateController = createCustomTemplateController({
