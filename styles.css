@@ -203,6 +203,29 @@ body.side-panel-resizing {
   background: radial-gradient(circle at 50% 0%, #1b2623, #101514 48%, #0b0e0e);
 }
 
+.snap-guide {
+  position: absolute;
+  pointer-events: none;
+  z-index: 90;
+  opacity: 0.92;
+}
+
+.snap-guide-vertical {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dashed rgba(96, 165, 250, 0.92);
+  transform: translateX(-0.5px);
+}
+
+.snap-guide-horizontal {
+  left: 0;
+  right: 0;
+  height: 1px;
+  border-top: 1px dashed rgba(96, 165, 250, 0.92);
+  transform: translateY(-0.5px);
+}
+
 body.template-mode #layersSection,
 body.template-mode #sidePanelResizeHandle {
   display: none;
@@ -216,6 +239,8 @@ body.template-mode #modeCrop,
 body.template-mode #modeRotate,
 body.template-mode #modeFilter,
 body.template-mode #modeShadow,
+body.template-mode #addAction,
+body.template-mode #textAction,
 body.template-mode #duplicateAction,
 body.template-mode #deleteAction,
 body.template-mode #removeBgAction,

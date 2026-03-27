@@ -14,12 +14,13 @@ import { attachCropSelection } from "./features/crop/CropSelectionController.js"
 import { openExportPopup } from "./features/export/ExportPopup.js";
 import { createHistoryManager } from "./features/history/HistoryManager.js";
 import { setupKeyboardShortcuts } from "./features/keyboard/KeyboardShortcuts.js";
-import { LayerBorderController } from "./features/select/LayerBorderController.js";
 import { attachLayersPanelDragAndDrop } from "./features/layers-panel/LayersPanelDragDrop.js";
 import { createRotateController } from "./features/rotate/RotateController.js";
 import { attachDragSelection } from "./features/select/DragSelectionController.js";
+import { LayerBorderController } from "./features/select/LayerBorderController.js";
 import { createShadowTools } from "./features/shadow/ShadowTools.js";
 import { createCustomTemplateController } from "./features/template/CustomTemplateController.js";
+import { showTemplateToast } from "./features/template/CustomTemplatePopup.js";
 import { createTextTools } from "./features/text/TextTools.js";
 import { createEditorViewportController } from "./features/viewport/EditorViewportController.js";
 import {
@@ -104,7 +105,9 @@ class EditorApplication {
     const layerRoot = document.getElementById("layerRoot");
     const addAction = document.getElementById("addAction");
     const textAction = document.getElementById("textAction");
-    const customTemplateAction = document.getElementById("customTemplateAction");
+    const customTemplateAction = document.getElementById(
+      "customTemplateAction",
+    );
     const optionsTitle = document.getElementById("optionsTitle");
     const selectionBox = document.getElementById("selectionBox");
     const rotateHandle = document.getElementById("rotateHandle");
@@ -1091,26 +1094,38 @@ class EditorApplication {
       if (isExporting) return;
 
       const selected = getLayerById(state.selectedLayerId);
-      if (!selected) return;
+      const allLayers = [...state.layers];
+      if (!selected && !allLayers.length) return;
+
+      const exportLayers = selected
+        ? getExportLayersForSelection(selected)
+        : getLayersByZOrderDesc().reverse();
+      if (!exportLayers.length) return;
+
+      const baseLayer = selected || exportLayers[0];
+      const allBounds = getBoundingRectForLayers(exportLayers);
+      if (!baseLayer || !allBounds) return;
 
       const cropToExport =
+        selected &&
         state.mode === "crop-select" &&
         state.cropSelection?.layerId === selected.id
           ? state.cropSelection
-          : {
-              x: selected.x,
-              y: selected.y,
-              width: selected.width,
-              height: selected.height,
-            };
+          : selected
+            ? {
+                x: selected.x,
+                y: selected.y,
+                width: selected.width,
+                height: selected.height,
+              }
+            : allBounds;
 
       isExporting = true;
       exportSelected.disabled = true;
 
       try {
-        const exportLayers = getExportLayersForSelection(selected);
         const { canvas } = await renderCompositeLayersToCanvas(
-          selected,
+          baseLayer,
           exportLayers,
           cropToExport,
           {
@@ -1131,8 +1146,11 @@ class EditorApplication {
           exportOptions.height,
         );
 
+        const isTargetMode = exportOptions.mode === "target";
+        const isLossyFormat = exportOptions.format !== "png";
+
         const exportResult =
-          exportOptions.mode === "target"
+          isTargetMode && isLossyFormat
             ? await encodeByTargetSize(
                 finalCanvas,
                 exportOptions.targetBytes,
@@ -1146,10 +1164,13 @@ class EditorApplication {
 
         downloadBlob(
           exportResult.blob,
-          `selected-${selected.id}.${exportResult.extension}`,
+          selected
+            ? `selected-${selected.id}.${exportResult.extension}`
+            : `canvas-export.${exportResult.extension}`,
         );
       } catch (error) {
         console.error(error);
+        window.alert("Export failed. Please try again.");
       } finally {
         isExporting = false;
         exportSelected.disabled = false;
@@ -2485,7 +2506,7 @@ class EditorApplication {
       upscaleAction?.setAttribute("data-hint", upscaleHint);
       upscaleAction?.setAttribute("aria-label", upscaleHint);
       deleteAction.disabled = isTemplateMode || !hasSelection;
-      exportSelected.disabled = !hasSelection;
+      exportSelected.disabled = state.layers.length === 0;
       stage.classList.toggle("crop-mode", state.mode === "crop-select");
       stage.classList.toggle("rotate-mode", state.mode === "rotate-select");
 
@@ -3373,7 +3394,7 @@ class EditorApplication {
         .saveCurrentTemplate()
         .then((saved) => {
           if (!saved) return;
-          window.alert("Template saved in local storage.");
+          showTemplateToast("Template saved successfully");
         })
         .catch((error) => {
           console.error("Failed to save template", error);
@@ -3386,8 +3407,11 @@ class EditorApplication {
 
       void customTemplateController
         .pickTemplate()
-        .then((template) => {
-          if (!template) return;
+        .then((result) => {
+          if (!result?.template) return;
+
+          const template = result.template;
+          const openMode = result.openMode || "template";
 
           const session = customTemplateController.applyTemplate(template);
           if (!session) {
@@ -3397,12 +3421,17 @@ class EditorApplication {
 
           templateSession.templateId = session.templateId;
           templateSession.templateName = session.templateName;
-          templateSession.bindings = session.bindings.filter(
-            (binding) => Boolean(binding.layerId),
+          templateSession.bindings = session.bindings.filter((binding) =>
+            Boolean(binding.layerId),
           );
-          setTemplateMode(true);
+          setTemplateMode(openMode === "template");
           refresh();
           commitHistory();
+          showTemplateToast(
+            openMode === "editor"
+              ? "Template opened in editor mode"
+              : "Template loaded successfully",
+          );
         })
         .catch((error) => {
           console.error("Failed to open template", error);
@@ -3528,6 +3557,7 @@ class EditorApplication {
       createLayer,
       setSelectedLayer,
       textTools,
+      loadImage,
     });
 
     addLayerFlowController.attachDirectDropImport(stage);

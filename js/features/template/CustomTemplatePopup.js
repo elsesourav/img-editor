@@ -74,7 +74,9 @@ function ensureStyles() {
       cursor: pointer;
       text-align: left;
       display: grid;
-      gap: 4px;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
     }
 
     .custom-template-item:hover {
@@ -82,15 +84,75 @@ function ensureStyles() {
       background: rgba(16, 185, 129, 0.16);
     }
 
+    .custom-template-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.06);
+      object-fit: cover;
+      display: block;
+    }
+
+    .custom-template-thumb.placeholder {
+      background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(59, 130, 246, 0.2));
+    }
+
+    .custom-template-item-info {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
     .custom-template-item strong {
       font-size: 12px;
       font-weight: 700;
       letter-spacing: 0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .custom-template-item span {
       font-size: 11px;
       color: rgba(228, 228, 231, 0.74);
+    }
+
+    .custom-template-item-actions {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      justify-self: end;
+    }
+
+    .custom-template-icon-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e7;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .custom-template-icon-btn svg {
+      width: 14px;
+      height: 14px;
+      display: block;
+    }
+
+    .custom-template-icon-btn:hover {
+      border-color: rgba(167, 243, 208, 0.84);
+      background: rgba(16, 185, 129, 0.2);
+    }
+
+    .custom-template-icon-btn.delete:hover {
+      border-color: rgba(251, 113, 133, 0.84);
+      background: rgba(244, 63, 94, 0.22);
     }
 
     .custom-template-actions {
@@ -107,6 +169,55 @@ function ensureStyles() {
       font-size: 12px;
       padding: 8px 12px;
       cursor: pointer;
+    }
+
+    .custom-template-edit-btn {
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e7;
+      font-size: 11px;
+      padding: 6px 8px;
+      cursor: pointer;
+    }
+
+    .custom-template-edit-btn:hover {
+      border-color: rgba(167, 243, 208, 0.84);
+      background: rgba(16, 185, 129, 0.2);
+    }
+
+    .custom-template-name-input {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e7;
+      font-size: 12px;
+      padding: 8px;
+    }
+
+    .template-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      z-index: 1500;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      background: rgba(16, 24, 39, 0.95);
+      color: #e5e7eb;
+      font-size: 12px;
+      line-height: 1.3;
+      padding: 9px 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      transition: opacity 150ms ease, transform 150ms ease;
+      pointer-events: none;
+    }
+
+    .template-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
 
     .custom-template-btn.primary {
@@ -182,8 +293,8 @@ export function openTemplateSaveConfirm({
 
 /**
  * Opens template picker popup and resolves selected template id.
- * @param {{id:string,name:string,createdAt:number,layersCount:number}[]} templates - Saved templates.
- * @return {Promise<string|null>} - Selected template id.
+ * @param {{id:string,name:string,createdAt:number,layersCount:number,thumb?:string|null}[]} templates - Saved templates.
+ * @return {Promise<{type:"select"|"edit-open"|"delete",id:string}|null>} - Picker action payload.
  */
 export function openCustomTemplatePicker(templates) {
   ensureStyles();
@@ -196,11 +307,31 @@ export function openCustomTemplatePicker(templates) {
       ? templates
           .map(
             (template) => `
-              <button type="button" class="custom-template-item" data-role="template" data-id="${template.id}">
-                <strong>${template.name}</strong>
-                <span>${template.layersCount} layers</span>
-                <span>${formatDateTime(template.createdAt)}</span>
-              </button>
+              <div class="custom-template-item" data-role="template" data-id="${template.id}" tabindex="0" role="button" aria-label="Open template ${template.name}">
+                ${template.thumb ? `<img class="custom-template-thumb" src="${template.thumb}" alt="${template.name} thumbnail" />` : '<span class="custom-template-thumb placeholder" aria-hidden="true"></span>'}
+                <span class="custom-template-item-info">
+                  <strong>${template.name}</strong>
+                  <span>${template.layersCount} layers</span>
+                  <span>${formatDateTime(template.createdAt)}</span>
+                </span>
+                <span class="custom-template-item-actions">
+                  <button type="button" class="custom-template-icon-btn delete" data-role="delete" data-id="${template.id}" aria-label="Delete template" title="Delete">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <path d="M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M6 7l1 12c.06.89.8 1.57 1.7 1.57h6.6c.9 0 1.64-.68 1.7-1.57L18 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M9 7V5.8C9 4.8 9.8 4 10.8 4h2.4C14.2 4 15 4.8 15 5.8V7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <button type="button" class="custom-template-icon-btn" data-role="edit" data-id="${template.id}" aria-label="Edit template in editor" title="Edit">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <path d="M4 20h4l10-10-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                      <path d="M13 7l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </span>
+              </div>
             `,
           )
           .join("")
@@ -233,13 +364,42 @@ export function openCustomTemplatePicker(templates) {
 
     window.addEventListener("keydown", onKeyDown);
 
-    overlay.querySelector('[data-role="cancel"]').addEventListener("click", () => {
-      close(null);
-    });
+    overlay
+      .querySelector('[data-role="cancel"]')
+      .addEventListener("click", () => {
+        close(null);
+      });
 
     overlay.querySelectorAll('[data-role="template"]').forEach((button) => {
       button.addEventListener("click", () => {
-        close(button.getAttribute("data-id") || null);
+        const id = button.getAttribute("data-id") || "";
+        if (!id) return;
+        close({ type: "select", id });
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        const id = button.getAttribute("data-id") || "";
+        if (!id) return;
+        close({ type: "select", id });
+      });
+    });
+
+    overlay.querySelectorAll('[data-role="edit"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const id = button.getAttribute("data-id") || "";
+        if (!id) return;
+        close({ type: "edit-open", id });
+      });
+    });
+
+    overlay.querySelectorAll('[data-role="delete"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const id = button.getAttribute("data-id") || "";
+        if (!id) return;
+        close({ type: "delete", id });
       });
     });
 
@@ -248,4 +408,114 @@ export function openCustomTemplatePicker(templates) {
       close(null);
     });
   });
+}
+
+/**
+ * Opens custom template name edit popup.
+ * @param {{initialName:string}} options - Input defaults.
+ * @return {Promise<string|null>} - New name or null when canceled.
+ */
+export function openTemplateNameEditor({ initialName = "" } = {}) {
+  ensureStyles();
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "custom-template-overlay";
+    overlay.innerHTML = `
+      <div class="custom-template-modal" role="dialog" aria-modal="true" aria-label="Edit template name">
+        <h3 class="custom-template-title">Edit Template</h3>
+        <p class="custom-template-message">Update template name.</p>
+        <input data-role="name" class="custom-template-name-input" type="text" maxlength="80" value="${String(initialName).replace(/"/g, "&quot;")}" />
+        <div class="custom-template-actions">
+          <button type="button" class="custom-template-btn" data-role="cancel">Cancel</button>
+          <button type="button" class="custom-template-btn primary" data-role="save">Save</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('[data-role="name"]');
+
+    const close = (result) => {
+      window.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+      resolve(result);
+    };
+
+    const submit = () => {
+      const value = String(input?.value || "").trim();
+      if (!value) {
+        close(null);
+        return;
+      }
+      close(value);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(null);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    overlay.querySelector('[data-role="cancel"]').addEventListener("click", () => close(null));
+    overlay.querySelector('[data-role="save"]').addEventListener("click", submit);
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      close(null);
+    });
+
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  });
+}
+
+let activeToast = null;
+
+/**
+ * Shows a bottom-center custom toast message.
+ * @param {string} message - Toast message.
+ * @param {{durationMs?:number}} options - Toast display options.
+ * @return {void}
+ */
+export function showTemplateToast(message, { durationMs = 1700 } = {}) {
+  ensureStyles();
+
+  if (activeToast?.el) {
+    activeToast.el.remove();
+    if (activeToast.timeoutId) {
+      clearTimeout(activeToast.timeoutId);
+    }
+  }
+
+  const el = document.createElement("div");
+  el.className = "template-toast";
+  el.textContent = String(message || "Done");
+  document.body.appendChild(el);
+
+  requestAnimationFrame(() => {
+    el.classList.add("show");
+  });
+
+  const timeoutId = setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => {
+      el.remove();
+      if (activeToast?.el === el) {
+        activeToast = null;
+      }
+    }, 160);
+  }, Math.max(600, Number(durationMs) || 1700));
+
+  activeToast = {
+    el,
+    timeoutId,
+  };
 }

@@ -1,5 +1,5 @@
-import { getRotatedBoundingRect } from "./RotationGeometry.js";
 import { nextLayerId, state } from "./EditorStateStore.js";
+import { getRotatedBoundingRect } from "./RotationGeometry.js";
 
 const DEFAULT_LAYER_FILTERS = Object.freeze({
   brightness: 100,

@@ -125,12 +125,20 @@ export class LayerBorderController {
     if (draft.size <= 0) return;
 
     const sourceImage = await this.loadImage(selectedLayer.src);
-    const sourceWidth = Math.max(1, sourceImage.naturalWidth || sourceImage.width || 1);
-    const sourceHeight = Math.max(1, sourceImage.naturalHeight || sourceImage.height || 1);
+    const sourceWidth = Math.max(
+      1,
+      sourceImage.naturalWidth || sourceImage.width || 1,
+    );
+    const sourceHeight = Math.max(
+      1,
+      sourceImage.naturalHeight || sourceImage.height || 1,
+    );
     const scaleX = sourceWidth / Math.max(1, selectedLayer.width);
     const scaleY = sourceHeight / Math.max(1, selectedLayer.height);
     const borderX = Math.max(1, Math.round(draft.size * scaleX));
     const borderY = Math.max(1, Math.round(draft.size * scaleY));
+    const expandX = borderX / Math.max(0.0001, scaleX);
+    const expandY = borderY / Math.max(0.0001, scaleY);
 
     const canvas = document.createElement("canvas");
     canvas.width = sourceWidth + borderX * 2;
@@ -155,11 +163,39 @@ export class LayerBorderController {
     ctx.drawImage(sourceImage, borderX, borderY, sourceWidth, sourceHeight);
 
     const previousSrc = selectedLayer.src;
+    const previousX = selectedLayer.x;
+    const previousY = selectedLayer.y;
     selectedLayer.src = canvas.toDataURL("image/png");
-    selectedLayer.x -= draft.size;
-    selectedLayer.y -= draft.size;
-    selectedLayer.width += draft.size * 2;
-    selectedLayer.height += draft.size * 2;
+    selectedLayer.x -= expandX;
+    selectedLayer.y -= expandY;
+    selectedLayer.width += expandX * 2;
+    selectedLayer.height += expandY * 2;
+
+    const deltaX = selectedLayer.x - previousX;
+    const deltaY = selectedLayer.y - previousY;
+    if (deltaX !== 0 || deltaY !== 0) {
+      for (const layer of this.state?.layers || []) {
+        if (!layer || layer.id === selectedLayer.id) continue;
+
+        let parentId = layer.parentId;
+        let isDescendant = false;
+        while (parentId) {
+          if (parentId === selectedLayer.id) {
+            isDescendant = true;
+            break;
+          }
+          const parentLayer = (this.state?.layers || []).find(
+            (item) => item.id === parentId,
+          );
+          parentId = parentLayer?.parentId || null;
+        }
+
+        if (isDescendant) {
+          layer.x += deltaX;
+          layer.y += deltaY;
+        }
+      }
+    }
 
     if (
       this.state?.cropSelection &&
@@ -172,11 +208,12 @@ export class LayerBorderController {
     }
 
     const currentRadius = this.getLayerCornerRadius(selectedLayer);
+    const radiusDelta = Math.round((expandX + expandY) / 2);
     selectedLayer.cornerRadius = {
-      lt: currentRadius.lt + draft.size,
-      rt: currentRadius.rt + draft.size,
-      rb: currentRadius.rb + draft.size,
-      lb: currentRadius.lb + draft.size,
+      lt: currentRadius.lt + radiusDelta,
+      rt: currentRadius.rt + radiusDelta,
+      rb: currentRadius.rb + radiusDelta,
+      lb: currentRadius.lb + radiusDelta,
     };
     this.ensureLayerCornerRadius(selectedLayer);
 
@@ -196,7 +233,9 @@ export class LayerBorderController {
    * @return {string} - Normalized #RRGGBB color.
    */
   normalizeColor(value) {
-    const raw = String(value || "").trim().toUpperCase();
+    const raw = String(value || "")
+      .trim()
+      .toUpperCase();
     const withHash = raw.startsWith("#") ? raw : `#${raw}`;
     if (/^#[0-9A-F]{6}$/.test(withHash)) {
       return withHash;

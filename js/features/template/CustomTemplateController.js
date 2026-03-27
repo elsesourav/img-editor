@@ -104,7 +104,9 @@ function createTemplateFromState({ state }) {
     return null;
   }
 
-  const selectedId = state.selectedLayerId ? String(state.selectedLayerId) : null;
+  const selectedId = state.selectedLayerId
+    ? String(state.selectedLayerId)
+    : null;
   const cropSelection =
     state.cropSelection && state.cropSelection.layerId
       ? {
@@ -133,16 +135,63 @@ function createTemplateFromState({ state }) {
         ? Number(state.cropAspectRatio)
         : null,
     layers,
+    thumb: null,
   };
 }
 
-function createControllerRuntime({ state, createLayer, setSelectedLayer, textTools }) {
+/**
+ * Builds a tiny thumbnail image to store with template metadata.
+ * @param {{state:any,loadImage:(src:string)=>Promise<HTMLImageElement>}} deps - Runtime deps.
+ * @return {Promise<string|null>} - Tiny thumbnail data URL.
+ */
+async function createTinyTemplateThumb({ state, loadImage }) {
+  const selected = state.layers.find((layer) => layer.id === state.selectedLayerId);
+  const fallback = state.layers[state.layers.length - 1] || state.layers[0];
+  const sourceLayer = selected || fallback;
+  if (!sourceLayer?.src || typeof loadImage !== "function") return null;
+
+  try {
+    const image = await loadImage(sourceLayer.src);
+    const canvas = document.createElement("canvas");
+    canvas.width = 56;
+    canvas.height = 56;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#111317";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const iw = Math.max(1, image.naturalWidth || image.width || 1);
+    const ih = Math.max(1, image.naturalHeight || image.height || 1);
+    const scale = Math.min(canvas.width / iw, canvas.height / ih);
+    const drawW = Math.max(1, Math.round(iw * scale));
+    const drawH = Math.max(1, Math.round(ih * scale));
+    const drawX = Math.round((canvas.width - drawW) / 2);
+    const drawY = Math.round((canvas.height - drawH) / 2);
+    ctx.drawImage(image, drawX, drawY, drawW, drawH);
+
+    return canvas.toDataURL("image/webp", 0.5);
+  } catch {
+    return null;
+  }
+}
+
+function createControllerRuntime({
+  state,
+  createLayer,
+  setSelectedLayer,
+  textTools,
+  loadImage,
+}) {
   function listTemplates() {
     return readTemplateListFromStorage();
   }
 
   function getTemplateById(templateId) {
-    return listTemplates().find((template) => template.id === templateId) || null;
+    return (
+      listTemplates().find((template) => template.id === templateId) || null
+    );
   }
 
   async function saveCurrentTemplate() {
@@ -156,6 +205,8 @@ function createControllerRuntime({ state, createLayer, setSelectedLayer, textToo
       return false;
     }
 
+    nextTemplate.thumb = await createTinyTemplateThumb({ state, loadImage });
+
     const templates = listTemplates();
     templates.unshift(nextTemplate);
     const limited = templates.slice(0, 40);
@@ -164,18 +215,54 @@ function createControllerRuntime({ state, createLayer, setSelectedLayer, textToo
   }
 
   async function pickTemplate() {
-    const templates = listTemplates();
-    const pickedId = await openCustomTemplatePicker(
-      templates.map((template) => ({
-        id: template.id,
-        name: template.name,
-        createdAt: template.createdAt,
-        layersCount: template.layers?.length || 0,
-      })),
-    );
+    while (true) {
+      const templates = listTemplates();
+      const action = await openCustomTemplatePicker(
+        templates.map((template) => ({
+          id: template.id,
+          name: template.name,
+          createdAt: template.createdAt,
+          layersCount: template.layers?.length || 0,
+          thumb: template.thumb || null,
+        })),
+      );
 
-    if (!pickedId) return null;
-    return getTemplateById(pickedId);
+      if (!action) return null;
+
+      if (action.type === "select") {
+        const picked = getTemplateById(action.id);
+        if (!picked) continue;
+        return {
+          template: picked,
+          openMode: "template",
+        };
+      }
+
+      if (action.type === "edit-open") {
+        const current = getTemplateById(action.id);
+        if (!current) {
+          continue;
+        }
+        return {
+          template: current,
+          openMode: "editor",
+        };
+      }
+
+      if (action.type === "delete") {
+        const shouldDelete = await openTemplateSaveConfirm({
+          message: "Delete this template permanently?",
+        });
+        if (!shouldDelete) {
+          continue;
+        }
+
+        const updated = templates.filter(
+          (template) => template.id !== action.id,
+        );
+        writeTemplateListToStorage(updated);
+      }
+    }
   }
 
   function applyTemplate(template) {
@@ -192,7 +279,10 @@ function createControllerRuntime({ state, createLayer, setSelectedLayer, textToo
 
     for (const snapshot of orderedSnapshots) {
       const isText = Boolean(snapshot.textMeta);
-      const src = createTransparentLayerDataUrl(snapshot.width, snapshot.height);
+      const src = createTransparentLayerDataUrl(
+        snapshot.width,
+        snapshot.height,
+      );
       const layer = createLayer(src, snapshot.width, snapshot.height);
 
       layer.name = String(snapshot.name || layer.id);
@@ -202,7 +292,9 @@ function createControllerRuntime({ state, createLayer, setSelectedLayer, textToo
       layer.height = sanitizeSize(snapshot.height, layer.height);
       layer.rotation = sanitizeNumber(snapshot.rotation, 0);
       layer.zOrder = sanitizeNumber(snapshot.zOrder, layer.zOrder);
-      layer.cropBackgroundColor = String(snapshot.cropBackgroundColor || "#ffffff");
+      layer.cropBackgroundColor = String(
+        snapshot.cropBackgroundColor || "#ffffff",
+      );
       layer.cropBackgroundMode = String(snapshot.cropBackgroundMode || "solid");
       layer.cornerRadius = cloneValue(snapshot.cornerRadius) || {
         lt: 0,
@@ -247,7 +339,9 @@ function createControllerRuntime({ state, createLayer, setSelectedLayer, textToo
     setSelectedLayer(mappedSelectedId || state.layers[0]?.id || null);
 
     if (template.cropSelection?.layerId) {
-      const mappedCropLayerId = oldToNewId.get(String(template.cropSelection.layerId));
+      const mappedCropLayerId = oldToNewId.get(
+        String(template.cropSelection.layerId),
+      );
       if (mappedCropLayerId) {
         state.cropSelection = {
           layerId: mappedCropLayerId,
@@ -274,7 +368,9 @@ function createControllerRuntime({ state, createLayer, setSelectedLayer, textToo
       layerId: state.layers[index]?.id,
       name: String(snapshot.name || `Layer ${index + 1}`),
       kind: snapshot.textMeta ? "text" : "image",
-      parentId: snapshot.parentId ? oldToNewId.get(String(snapshot.parentId)) || null : null,
+      parentId: snapshot.parentId
+        ? oldToNewId.get(String(snapshot.parentId)) || null
+        : null,
     }));
 
     return {
