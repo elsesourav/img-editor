@@ -124,76 +124,40 @@ export class LayerBorderController {
     const draft = this.getDraft();
     if (draft.size <= 0) return;
 
-    const sourceImage = await this.loadImage(selectedLayer.src);
-    const sourceWidth = Math.max(
-      1,
-      sourceImage.naturalWidth || sourceImage.width || 1,
+    const addSize = draft.size;
+    const existingBorderSize = Math.max(
+      0,
+      Math.round(Number(selectedLayer.appliedBorder?.size) || 0),
     );
-    const sourceHeight = Math.max(
-      1,
-      sourceImage.naturalHeight || sourceImage.height || 1,
-    );
-    const scaleX = sourceWidth / Math.max(1, selectedLayer.width);
-    const scaleY = sourceHeight / Math.max(1, selectedLayer.height);
-    const borderX = Math.max(1, Math.round(draft.size * scaleX));
-    const borderY = Math.max(1, Math.round(draft.size * scaleY));
-    const expandX = borderX / Math.max(0.0001, scaleX);
-    const expandY = borderY / Math.max(0.0001, scaleY);
 
-    const canvas = document.createElement("canvas");
-    canvas.width = sourceWidth + borderX * 2;
-    canvas.height = sourceHeight + borderY * 2;
+    selectedLayer.appliedBorder = {
+      size: existingBorderSize + addSize,
+      color: this.normalizeColor(draft.color),
+    };
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas is not available.");
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    selectedLayer.width += addSize * 2;
+    selectedLayer.height += addSize * 2;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = draft.color;
-    ctx.fillRect(0, 0, canvas.width, borderY);
-    ctx.fillRect(0, canvas.height - borderY, canvas.width, borderY);
-    ctx.fillRect(0, borderY, borderX, canvas.height - borderY * 2);
-    ctx.fillRect(
-      canvas.width - borderX,
-      borderY,
-      borderX,
-      canvas.height - borderY * 2,
-    );
-    ctx.drawImage(sourceImage, borderX, borderY, sourceWidth, sourceHeight);
+    for (const layer of this.state?.layers || []) {
+      if (!layer || layer.id === selectedLayer.id) continue;
 
-    const previousSrc = selectedLayer.src;
-    const previousX = selectedLayer.x;
-    const previousY = selectedLayer.y;
-    selectedLayer.src = canvas.toDataURL("image/png");
-    selectedLayer.x -= expandX;
-    selectedLayer.y -= expandY;
-    selectedLayer.width += expandX * 2;
-    selectedLayer.height += expandY * 2;
-
-    const deltaX = selectedLayer.x - previousX;
-    const deltaY = selectedLayer.y - previousY;
-    if (deltaX !== 0 || deltaY !== 0) {
-      for (const layer of this.state?.layers || []) {
-        if (!layer || layer.id === selectedLayer.id) continue;
-
-        let parentId = layer.parentId;
-        let isDescendant = false;
-        while (parentId) {
-          if (parentId === selectedLayer.id) {
-            isDescendant = true;
-            break;
-          }
-          const parentLayer = (this.state?.layers || []).find(
-            (item) => item.id === parentId,
-          );
-          parentId = parentLayer?.parentId || null;
+      let parentId = layer.parentId;
+      let isDescendant = false;
+      while (parentId) {
+        if (parentId === selectedLayer.id) {
+          isDescendant = true;
+          break;
         }
+        const parentLayer = (this.state?.layers || []).find(
+          (item) => item.id === parentId,
+        );
+        parentId = parentLayer?.parentId || null;
+      }
 
-        if (isDescendant) {
-          layer.x += deltaX;
-          layer.y += deltaY;
-        }
+      // Keep inner child composition unchanged while parent gets a larger border box.
+      if (isDescendant) {
+        layer.x += addSize;
+        layer.y += addSize;
       }
     }
 
@@ -201,14 +165,12 @@ export class LayerBorderController {
       this.state?.cropSelection &&
       this.state.cropSelection.layerId === selectedLayer.id
     ) {
-      this.state.cropSelection.x = selectedLayer.x;
-      this.state.cropSelection.y = selectedLayer.y;
       this.state.cropSelection.width = selectedLayer.width;
       this.state.cropSelection.height = selectedLayer.height;
     }
 
     const currentRadius = this.getLayerCornerRadius(selectedLayer);
-    const radiusDelta = Math.round((expandX + expandY) / 2);
+    const radiusDelta = addSize;
     selectedLayer.cornerRadius = {
       lt: currentRadius.lt + radiusDelta,
       rt: currentRadius.rt + radiusDelta,
@@ -216,8 +178,6 @@ export class LayerBorderController {
       lb: currentRadius.lb + radiusDelta,
     };
     this.ensureLayerCornerRadius(selectedLayer);
-
-    this.revokeBlobUrlIfNeeded(previousSrc);
   }
 
   /**

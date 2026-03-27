@@ -159,7 +159,11 @@ export class DragSelectionRuntime {
       if (!layer || excludedIds.has(layer.id)) continue;
 
       xTargets.push(layer.x, layer.x + layer.width / 2, layer.x + layer.width);
-      yTargets.push(layer.y, layer.y + layer.height / 2, layer.y + layer.height);
+      yTargets.push(
+        layer.y,
+        layer.y + layer.height / 2,
+        layer.y + layer.height,
+      );
     }
 
     return {

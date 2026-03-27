@@ -294,7 +294,7 @@ export function openTemplateSaveConfirm({
 /**
  * Opens template picker popup and resolves selected template id.
  * @param {{id:string,name:string,createdAt:number,layersCount:number,thumb?:string|null}[]} templates - Saved templates.
- * @return {Promise<{type:"select"|"edit-open"|"delete",id:string}|null>} - Picker action payload.
+ * @return {Promise<{type:"select"|"edit-open"|"delete"|"export-json",id:string}|{type:"import-json",jsonText:string}|null>} - Picker action payload.
  */
 export function openCustomTemplatePicker(templates) {
   ensureStyles();
@@ -324,6 +324,13 @@ export function openCustomTemplatePicker(templates) {
                       <path d="M9 7V5.8C9 4.8 9.8 4 10.8 4h2.4C14.2 4 15 4.8 15 5.8V7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
                   </button>
+                  <button type="button" class="custom-template-icon-btn" data-role="export" data-id="${template.id}" aria-label="Export template JSON" title="Export JSON">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <path d="M12 16V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M8 8l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
                   <button type="button" class="custom-template-icon-btn" data-role="edit" data-id="${template.id}" aria-label="Edit template in editor" title="Edit">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                       <path d="M4 20h4l10-10-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
@@ -343,12 +350,18 @@ export function openCustomTemplatePicker(templates) {
         <p class="custom-template-message">Choose a saved template to apply layout, filter, crop, and style data.</p>
         <div class="custom-template-list">${itemsMarkup}</div>
         <div class="custom-template-actions">
+          <button type="button" class="custom-template-btn" data-role="import">Import JSON</button>
           <button type="button" class="custom-template-btn" data-role="cancel">Close</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(overlay);
+    const importInput = document.createElement("input");
+    importInput.type = "file";
+    importInput.accept = ".json,application/json";
+    importInput.style.display = "none";
+    overlay.appendChild(importInput);
 
     const close = (result) => {
       window.removeEventListener("keydown", onKeyDown);
@@ -369,6 +382,21 @@ export function openCustomTemplatePicker(templates) {
       .addEventListener("click", () => {
         close(null);
       });
+
+    overlay.querySelector('[data-role="import"]').addEventListener("click", () => {
+      importInput.click();
+    });
+
+    importInput.addEventListener("change", async () => {
+      const file = importInput.files?.[0];
+      if (!file) return;
+      try {
+        const jsonText = await file.text();
+        close({ type: "import-json", jsonText });
+      } catch {
+        close(null);
+      }
+    });
 
     overlay.querySelectorAll('[data-role="template"]').forEach((button) => {
       button.addEventListener("click", () => {
@@ -400,6 +428,15 @@ export function openCustomTemplatePicker(templates) {
         const id = button.getAttribute("data-id") || "";
         if (!id) return;
         close({ type: "delete", id });
+      });
+    });
+
+    overlay.querySelectorAll('[data-role="export"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const id = button.getAttribute("data-id") || "";
+        if (!id) return;
+        close({ type: "export-json", id });
       });
     });
 
@@ -463,8 +500,12 @@ export function openTemplateNameEditor({ initialName = "" } = {}) {
     };
 
     window.addEventListener("keydown", onKeyDown);
-    overlay.querySelector('[data-role="cancel"]').addEventListener("click", () => close(null));
-    overlay.querySelector('[data-role="save"]').addEventListener("click", submit);
+    overlay
+      .querySelector('[data-role="cancel"]')
+      .addEventListener("click", () => close(null));
+    overlay
+      .querySelector('[data-role="save"]')
+      .addEventListener("click", submit);
     overlay.addEventListener("click", (event) => {
       if (event.target !== overlay) return;
       close(null);
@@ -504,15 +545,18 @@ export function showTemplateToast(message, { durationMs = 1700 } = {}) {
     el.classList.add("show");
   });
 
-  const timeoutId = setTimeout(() => {
-    el.classList.remove("show");
-    setTimeout(() => {
-      el.remove();
-      if (activeToast?.el === el) {
-        activeToast = null;
-      }
-    }, 160);
-  }, Math.max(600, Number(durationMs) || 1700));
+  const timeoutId = setTimeout(
+    () => {
+      el.classList.remove("show");
+      setTimeout(() => {
+        el.remove();
+        if (activeToast?.el === el) {
+          activeToast = null;
+        }
+      }, 160);
+    },
+    Math.max(600, Number(durationMs) || 1700),
+  );
 
   activeToast = {
     el,

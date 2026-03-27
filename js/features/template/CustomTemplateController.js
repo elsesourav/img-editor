@@ -58,6 +58,52 @@ function writeTemplateListToStorage(templates) {
   }
 }
 
+function downloadTemplateJson(template) {
+  const safeName = String(template?.name || "template")
+    .trim()
+    .replace(/[^a-zA-Z0-9-_ ]+/g, "")
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+
+  const payload = {
+    schemaVersion: 1,
+    exportedAt: Date.now(),
+    template,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeName || "template"}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function normalizeImportedTemplate(payload) {
+  const rawTemplate =
+    payload?.template && Array.isArray(payload.template.layers)
+      ? payload.template
+      : payload;
+
+  if (!rawTemplate || !Array.isArray(rawTemplate.layers) || !rawTemplate.layers.length) {
+    return null;
+  }
+
+  return {
+    ...rawTemplate,
+    id:
+      rawTemplate.id ||
+      `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: String(rawTemplate.name || "Imported Template"),
+    createdAt: Number(rawTemplate.createdAt) || Date.now(),
+  };
+}
+
 function toLayerSnapshot(layer) {
   return {
     id: String(layer.id),
@@ -89,6 +135,7 @@ function toLayerSnapshot(layer) {
       strokeSize: 0,
       strokeColor: "#000000",
     },
+    appliedBorder: layer.appliedBorder ? cloneValue(layer.appliedBorder) : null,
     filters: cloneValue(layer.filters) || null,
     textMeta: layer.textMeta ? cloneValue(layer.textMeta) : null,
   };
@@ -145,7 +192,9 @@ function createTemplateFromState({ state }) {
  * @return {Promise<string|null>} - Tiny thumbnail data URL.
  */
 async function createTinyTemplateThumb({ state, loadImage }) {
-  const selected = state.layers.find((layer) => layer.id === state.selectedLayerId);
+  const selected = state.layers.find(
+    (layer) => layer.id === state.selectedLayerId,
+  );
   const fallback = state.layers[state.layers.length - 1] || state.layers[0];
   const sourceLayer = selected || fallback;
   if (!sourceLayer?.src || typeof loadImage !== "function") return null;
@@ -261,6 +310,36 @@ function createControllerRuntime({
           (template) => template.id !== action.id,
         );
         writeTemplateListToStorage(updated);
+        continue;
+      }
+
+      if (action.type === "export-json") {
+        const current = getTemplateById(action.id);
+        if (!current) {
+          continue;
+        }
+        downloadTemplateJson(current);
+        continue;
+      }
+
+      if (action.type === "import-json") {
+        try {
+          const parsed = JSON.parse(String(action.jsonText || ""));
+          const importedTemplate = normalizeImportedTemplate(parsed);
+          if (!importedTemplate) {
+            window.alert("Invalid template JSON file.");
+            continue;
+          }
+
+          if (templates.some((template) => template.id === importedTemplate.id)) {
+            importedTemplate.id =
+              `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          }
+
+          writeTemplateListToStorage([importedTemplate, ...templates].slice(0, 40));
+        } catch {
+          window.alert("Failed to import template JSON.");
+        }
       }
     }
   }
@@ -303,6 +382,9 @@ function createControllerRuntime({
         lb: 0,
       };
       layer.shadowStyle = cloneValue(snapshot.shadowStyle) || layer.shadowStyle;
+      if (snapshot.appliedBorder) {
+        layer.appliedBorder = cloneValue(snapshot.appliedBorder);
+      }
       if (snapshot.filters) {
         layer.filters = cloneValue(snapshot.filters);
       }

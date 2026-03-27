@@ -650,6 +650,18 @@ function buildLayerElement(
   el.style.transformOrigin = "center center";
   const cornerRadius = getLayerCornerRadius(layer);
   el.style.borderRadius = cornerRadius.css;
+  const appliedBorderSize = Math.max(
+    0,
+    Math.round(Number(layer?.appliedBorder?.size) || 0),
+  );
+  const appliedBorderColor = normalizeHexColor(
+    layer?.appliedBorder?.color,
+    "#FFFFFF",
+  );
+  el.style.border =
+    appliedBorderSize > 0
+      ? `${appliedBorderSize}px solid ${appliedBorderColor}`
+      : "none";
   el.style.boxShadow = "none";
 
   if (
@@ -689,13 +701,19 @@ function buildLayerImage(layer, bounds, { usePreviewFill = false } = {}) {
   img.src = layer.src;
   img.alt = layer.id;
   img.draggable = false;
+  const appliedBorderSize = Math.max(
+    0,
+    Math.round(Number(layer?.appliedBorder?.size) || 0),
+  );
+  const contentWidth = Math.max(1, layer.width - appliedBorderSize * 2);
+  const contentHeight = Math.max(1, layer.height - appliedBorderSize * 2);
   // Always render with explicit px sizing to prevent tiny jumps
   // when crop expand toggles between normal and expanded canvas.
   img.style.position = "absolute";
   img.style.left = `${layer.x - bounds.left}px`;
   img.style.top = `${layer.y - bounds.top}px`;
-  img.style.width = `${layer.width}px`;
-  img.style.height = `${layer.height}px`;
+  img.style.width = `${contentWidth}px`;
+  img.style.height = `${contentHeight}px`;
   const baseFilter = buildLayerFilterString(layer);
   const layerShadow = getLayerShadowStyle(layer);
   const filterParts = [];
@@ -747,12 +765,18 @@ function buildLayerInsetShadowOverlay(
     return null;
   }
 
+  const appliedBorderSize = Math.max(
+    0,
+    Math.round(Number(layer?.appliedBorder?.size) || 0),
+  );
+  const contentWidth = Math.max(1, layer.width - appliedBorderSize * 2);
+  const contentHeight = Math.max(1, layer.height - appliedBorderSize * 2);
   const overlay = document.createElement("div");
   overlay.className = "layer-inset-shadow-overlay";
   overlay.style.left = `${layer.x - bounds.left}px`;
   overlay.style.top = `${layer.y - bounds.top}px`;
-  overlay.style.width = `${layer.width}px`;
-  overlay.style.height = `${layer.height}px`;
+  overlay.style.width = `${contentWidth}px`;
+  overlay.style.height = `${contentHeight}px`;
   overlay.style.boxShadow = `inset ${insetShadow.x}px ${insetShadow.y}px ${insetShadow.blur}px ${insetShadow.cssColor}`;
   overlay.style.borderRadius = getLayerCornerRadius(layer).css;
 
