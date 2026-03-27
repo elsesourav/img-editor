@@ -383,9 +383,11 @@ export function openCustomTemplatePicker(templates) {
         close(null);
       });
 
-    overlay.querySelector('[data-role="import"]').addEventListener("click", () => {
-      importInput.click();
-    });
+    overlay
+      .querySelector('[data-role="import"]')
+      .addEventListener("click", () => {
+        importInput.click();
+      });
 
     importInput.addEventListener("change", async () => {
       const file = importInput.files?.[0];

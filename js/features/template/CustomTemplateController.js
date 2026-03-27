@@ -90,7 +90,11 @@ function normalizeImportedTemplate(payload) {
       ? payload.template
       : payload;
 
-  if (!rawTemplate || !Array.isArray(rawTemplate.layers) || !rawTemplate.layers.length) {
+  if (
+    !rawTemplate ||
+    !Array.isArray(rawTemplate.layers) ||
+    !rawTemplate.layers.length
+  ) {
     return null;
   }
 
@@ -331,12 +335,15 @@ function createControllerRuntime({
             continue;
           }
 
-          if (templates.some((template) => template.id === importedTemplate.id)) {
-            importedTemplate.id =
-              `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          if (
+            templates.some((template) => template.id === importedTemplate.id)
+          ) {
+            importedTemplate.id = `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           }
 
-          writeTemplateListToStorage([importedTemplate, ...templates].slice(0, 40));
+          writeTemplateListToStorage(
+            [importedTemplate, ...templates].slice(0, 40),
+          );
         } catch {
           window.alert("Failed to import template JSON.");
         }
