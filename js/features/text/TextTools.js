@@ -612,6 +612,7 @@ function createTextToolsRuntime({
     createTextLayer,
     ensureLayerTextDefaults,
     renderMoveTextOptions,
+    applyTextMetaToLayer,
   };
 }
 
@@ -636,6 +637,16 @@ class TextToolsController {
 
   renderMoveTextOptions(selected, optionsPanel) {
     this.impl.renderMoveTextOptions(selected, optionsPanel);
+  }
+
+  /**
+   * @param {any} layer
+   * @param {any} nextMeta
+   * @param {{commit?: boolean}} options
+   * @return {void}
+   */
+  applyTextMetaToLayer(layer, nextMeta, options = {}) {
+    this.impl.applyTextMetaToLayer(layer, nextMeta, options);
   }
 }
 

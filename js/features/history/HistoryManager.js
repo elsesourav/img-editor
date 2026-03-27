@@ -1,8 +1,4 @@
-import {
-  getLayerIdCounter,
-  setLayerIdCounter,
-  state,
-} from "../../core/EditorStateStore.js";
+import { getLayerIdCounter, setLayerIdCounter, state } from "../../state.js";
 
 function deepClone(value) {
   if (typeof structuredClone === "function") {

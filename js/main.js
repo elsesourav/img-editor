@@ -14,11 +14,12 @@ import { attachCropSelection } from "./features/crop/CropSelectionController.js"
 import { openExportPopup } from "./features/export/ExportPopup.js";
 import { createHistoryManager } from "./features/history/HistoryManager.js";
 import { setupKeyboardShortcuts } from "./features/keyboard/KeyboardShortcuts.js";
-import { LayerBorderController } from "./features/layer-border/LayerBorderController.js";
+import { LayerBorderController } from "./features/select/LayerBorderController.js";
 import { attachLayersPanelDragAndDrop } from "./features/layers-panel/LayersPanelDragDrop.js";
 import { createRotateController } from "./features/rotate/RotateController.js";
 import { attachDragSelection } from "./features/select/DragSelectionController.js";
 import { createShadowTools } from "./features/shadow/ShadowTools.js";
+import { createCustomTemplateController } from "./features/template/CustomTemplateController.js";
 import { createTextTools } from "./features/text/TextTools.js";
 import { createEditorViewportController } from "./features/viewport/EditorViewportController.js";
 import {
@@ -44,19 +45,19 @@ import {
   setLayerName,
   setSelectedLayer,
   syncLayerParentingForLayer,
-} from "./core/LayerStore.js";
+} from "./layers.js";
 import {
   createMetricsGrid,
   createNumberInput,
   createOptionRow,
   createSelectInput,
   createTextInput,
-} from "./core/OptionsUiHelpers.js";
+} from "./options-ui-helpers.js";
 import {
   getRotatedBoundingRect,
   mapPointToLayerLocal,
-} from "./core/RotationGeometry.js";
-import { state } from "./core/EditorStateStore.js";
+} from "./rotation-geometry.js";
+import { state } from "./state.js";
 import {
   applySharpenToCanvas as applySharpenToCanvasUtil,
   bakeObjectStrokeIntoCanvas as bakeObjectStrokeIntoCanvasUtil,
@@ -103,6 +104,7 @@ class EditorApplication {
     const layerRoot = document.getElementById("layerRoot");
     const addAction = document.getElementById("addAction");
     const textAction = document.getElementById("textAction");
+    const customTemplateAction = document.getElementById("customTemplateAction");
     const optionsTitle = document.getElementById("optionsTitle");
     const selectionBox = document.getElementById("selectionBox");
     const rotateHandle = document.getElementById("rotateHandle");
@@ -128,6 +130,7 @@ class EditorApplication {
     const upscaleAction = document.getElementById("upscaleAction");
     const deleteAction = document.getElementById("deleteAction");
     const exportSelected = document.getElementById("exportSelected");
+    const saveTemplateAction = document.getElementById("saveTemplateAction");
     const zoomOut = document.getElementById("zoomOut");
     const zoomReset = document.getElementById("zoomReset");
     const zoomIn = document.getElementById("zoomIn");
@@ -145,6 +148,13 @@ class EditorApplication {
     let historyManager = null;
     const backgroundRemovalController = createBackgroundRemovalController();
     let addLayerFlowController = null;
+    let customTemplateController = null;
+    const templateSession = {
+      active: false,
+      templateId: null,
+      templateName: "",
+      bindings: [],
+    };
 
     const viewportController = createEditorViewportController({
       state,
@@ -1151,6 +1161,10 @@ class EditorApplication {
     }
 
     function setEditorMode(nextMode) {
+      if (templateSession.active && nextMode !== "drag-select") {
+        return;
+      }
+
       shadowTools.handleModeChange(state.mode, nextMode);
 
       if (nextMode === "shadow-adjust") {
@@ -1384,6 +1398,127 @@ class EditorApplication {
       empty.className = "empty-option";
       empty.textContent = message;
       optionsPanel.appendChild(empty);
+    }
+
+    function setTemplateMode(active) {
+      templateSession.active = Boolean(active);
+      if (!templateSession.active) {
+        templateSession.templateId = null;
+        templateSession.templateName = "";
+        templateSession.bindings = [];
+      }
+
+      document.body.classList.toggle("template-mode", templateSession.active);
+      if (templateSession.active) {
+        state.mode = "drag-select";
+      }
+    }
+
+    function renderTemplateModeOptions() {
+      optionsPanel.innerHTML = "";
+
+      const title = document.createElement("div");
+      title.className = "option-caption";
+      title.textContent = templateSession.templateName
+        ? `Template: ${templateSession.templateName}`
+        : "Template Inputs";
+      optionsPanel.appendChild(title);
+
+      const note = document.createElement("p");
+      note.className = "template-note";
+      note.textContent =
+        "Upload images and edit text for the template slots. Parent and child layers stay linked.";
+      const noteRow = createOptionRow("", note);
+      noteRow.classList.add("full");
+      optionsPanel.appendChild(noteRow);
+
+      appendOptionDivider();
+
+      for (const binding of templateSession.bindings) {
+        const layer = getLayerById(binding.layerId);
+        if (!layer) continue;
+
+        const block = document.createElement("div");
+        block.className = "template-input-block";
+
+        const blockTitle = document.createElement("h4");
+        blockTitle.className = "template-input-block-title";
+        blockTitle.textContent = `${binding.name} (${binding.kind})`;
+        block.appendChild(blockTitle);
+
+        const focusBtn = document.createElement("button");
+        focusBtn.type = "button";
+        focusBtn.className = "button option-button";
+        focusBtn.textContent = "Select Layer";
+        focusBtn.addEventListener("click", () => {
+          setSelectedLayer(layer.id);
+          refresh({ rerenderOptions: false, rerenderLayersPanel: false });
+        });
+        block.appendChild(focusBtn);
+
+        if (binding.kind === "image") {
+          const imageInput = document.createElement("input");
+          imageInput.type = "file";
+          imageInput.accept = "image/*";
+          imageInput.addEventListener("change", () => {
+            const file = imageInput.files?.[0];
+            if (!file || !customTemplateController) return;
+
+            void customTemplateController
+              .applyImageFileToLayer(layer.id, file)
+              .then((updated) => {
+                if (!updated) return;
+                refresh({ rerenderOptions: false, rerenderLayersPanel: false });
+                commitHistory();
+              })
+              .catch((error) => {
+                console.error("Template image apply failed", error);
+              });
+          });
+          block.appendChild(createOptionRow("Image", imageInput));
+        }
+
+        if (binding.kind === "text" && layer.textMeta) {
+          const textInput = document.createElement("textarea");
+          textInput.className = "option-textarea";
+          textInput.rows = 3;
+          textInput.value = String(layer.textMeta.content || "");
+          textInput.placeholder = "Text content";
+          textInput.addEventListener("input", () => {
+            customTemplateController?.applyTextContentToLayer(
+              layer.id,
+              textInput.value,
+            );
+            refresh({ rerenderOptions: false, rerenderLayersPanel: false });
+          });
+          textInput.addEventListener("change", () => {
+            customTemplateController?.applyTextContentToLayer(
+              layer.id,
+              textInput.value,
+            );
+            refresh({ rerenderOptions: false, rerenderLayersPanel: false });
+            commitHistory();
+          });
+          block.appendChild(createOptionRow("Text", textInput));
+        }
+
+        const blockRow = createOptionRow("", block);
+        blockRow.classList.add("full");
+        optionsPanel.appendChild(blockRow);
+      }
+
+      appendOptionDivider();
+      const exitButton = document.createElement("button");
+      exitButton.type = "button";
+      exitButton.className = "button option-button";
+      exitButton.textContent = "Exit Template Mode";
+      exitButton.addEventListener("click", () => {
+        setTemplateMode(false);
+        refresh();
+      });
+      const exitRow = createOptionRow("", exitButton);
+      exitRow.classList.add("full");
+      optionsPanel.appendChild(exitRow);
     }
 
     function appendOptionDivider() {
@@ -2261,6 +2396,11 @@ class EditorApplication {
     }
 
     function renderOptionsPanel() {
+      if (templateSession.active) {
+        renderTemplateModeOptions();
+        return;
+      }
+
       const selected = getLayerById(state.selectedLayerId);
       if (!selected) {
         renderEmptyOptions("Select a layer to edit options.");
@@ -2309,7 +2449,9 @@ class EditorApplication {
       const hasSelection = Boolean(state.selectedLayerId);
 
       if (optionsTitle) {
-        optionsTitle.textContent = `Options (${modeLabel})`;
+        optionsTitle.textContent = templateSession.active
+          ? "Options (Template)"
+          : `Options (${modeLabel})`;
       }
 
       modeSelect.classList.toggle("active", state.mode === "drag-select");
@@ -2317,13 +2459,20 @@ class EditorApplication {
       modeRotate.classList.toggle("active", state.mode === "rotate-select");
       modeFilter.classList.toggle("active", state.mode === "filter-adjust");
       modeShadow?.classList.toggle("active", state.mode === "shadow-adjust");
-      modeFilter.disabled = false;
-      duplicateAction.disabled = !hasSelection;
+      const isTemplateMode = templateSession.active;
+      modeCrop.disabled = isTemplateMode;
+      modeRotate.disabled = isTemplateMode;
+      modeFilter.disabled = isTemplateMode;
+      if (modeShadow) {
+        modeShadow.disabled = isTemplateMode;
+      }
+
+      duplicateAction.disabled = isTemplateMode || !hasSelection;
       const isAiBusy =
         isRemovingBackground || isApplyingBackgroundBlur || isUpscaling;
-      removeBgAction.disabled = !hasSelection || isAiBusy;
+      removeBgAction.disabled = isTemplateMode || !hasSelection || isAiBusy;
       if (upscaleAction) {
-        upscaleAction.disabled = !hasSelection || isAiBusy;
+        upscaleAction.disabled = isTemplateMode || !hasSelection || isAiBusy;
       }
       const removeBgHint = isAiBusy
         ? "Processing AI..."
@@ -2335,16 +2484,24 @@ class EditorApplication {
       removeBgAction.setAttribute("aria-label", removeBgHint);
       upscaleAction?.setAttribute("data-hint", upscaleHint);
       upscaleAction?.setAttribute("aria-label", upscaleHint);
-      deleteAction.disabled = !hasSelection;
+      deleteAction.disabled = isTemplateMode || !hasSelection;
       exportSelected.disabled = !hasSelection;
       stage.classList.toggle("crop-mode", state.mode === "crop-select");
       stage.classList.toggle("rotate-mode", state.mode === "rotate-select");
+
+      if (layersSection) {
+        layersSection.style.display = isTemplateMode ? "none" : "";
+      }
+      if (sidePanelResizeHandle) {
+        sidePanelResizeHandle.style.display = isTemplateMode ? "none" : "";
+      }
     }
 
     function setupToolbarHints() {
       const entries = [
         ["addAction", addAction],
         ["textAction", textAction],
+        ["customTemplateAction", customTemplateAction],
         ["modeSelect", modeSelect],
         ["modeCrop", modeCrop],
         ["modeRotate", modeRotate],
@@ -2357,6 +2514,7 @@ class EditorApplication {
         ["upscaleAction", upscaleAction],
         ["deleteAction", deleteAction],
         ["exportSelected", exportSelected],
+        ["saveTemplateAction", saveTemplateAction],
         ["zoomOut", zoomOut],
         ["zoomReset", zoomReset],
         ["zoomIn", zoomIn],
@@ -3157,34 +3315,42 @@ class EditorApplication {
     });
 
     modeCrop.addEventListener("click", () => {
+      if (templateSession.active) return;
       setEditorMode("crop-select");
     });
 
     modeRotate.addEventListener("click", () => {
+      if (templateSession.active) return;
       setEditorMode("rotate-select");
     });
 
     modeFilter.addEventListener("click", () => {
+      if (templateSession.active) return;
       setEditorMode("filter-adjust");
     });
 
     modeShadow?.addEventListener("click", () => {
+      if (templateSession.active) return;
       setEditorMode("shadow-adjust");
     });
 
     duplicateAction.addEventListener("click", () => {
+      if (templateSession.active) return;
       duplicateSelectedLayer();
     });
 
     removeBgAction.addEventListener("click", () => {
+      if (templateSession.active) return;
       void removeBackgroundFromSelectedLayer();
     });
 
     upscaleAction?.addEventListener("click", () => {
+      if (templateSession.active) return;
       void upscaleSelectedLayer();
     });
 
     deleteAction.addEventListener("click", () => {
+      if (templateSession.active) return;
       deleteSelectedLayer();
     });
 
@@ -3198,6 +3364,50 @@ class EditorApplication {
 
     exportSelected.addEventListener("click", () => {
       void exportSelectedImage();
+    });
+
+    saveTemplateAction?.addEventListener("click", () => {
+      if (!customTemplateController) return;
+
+      void customTemplateController
+        .saveCurrentTemplate()
+        .then((saved) => {
+          if (!saved) return;
+          window.alert("Template saved in local storage.");
+        })
+        .catch((error) => {
+          console.error("Failed to save template", error);
+          window.alert("Unable to save template.");
+        });
+    });
+
+    customTemplateAction?.addEventListener("click", () => {
+      if (!customTemplateController) return;
+
+      void customTemplateController
+        .pickTemplate()
+        .then((template) => {
+          if (!template) return;
+
+          const session = customTemplateController.applyTemplate(template);
+          if (!session) {
+            window.alert("Template could not be applied.");
+            return;
+          }
+
+          templateSession.templateId = session.templateId;
+          templateSession.templateName = session.templateName;
+          templateSession.bindings = session.bindings.filter(
+            (binding) => Boolean(binding.layerId),
+          );
+          setTemplateMode(true);
+          refresh();
+          commitHistory();
+        })
+        .catch((error) => {
+          console.error("Failed to open template", error);
+          window.alert("Unable to open custom template.");
+        });
     });
 
     function refresh({
@@ -3247,7 +3457,10 @@ class EditorApplication {
     setupKeyboardShortcuts({
       getHistoryManager: () => historyManager,
       updateHistoryButtons,
-      onDuplicate: duplicateSelectedLayer,
+      onDuplicate: () => {
+        if (templateSession.active) return;
+        duplicateSelectedLayer();
+      },
       onZoomIn: () => setEditorZoom(state.editorZoom + KEYBOARD_ZOOM_STEP),
       onZoomOut: () => setEditorZoom(state.editorZoom - KEYBOARD_ZOOM_STEP),
       onZoomReset: () => setEditorZoom(1),
@@ -3256,12 +3469,27 @@ class EditorApplication {
         setEyedropperActive(false);
         refresh({ rerenderOptions: true, rerenderLayersPanel: false });
       },
-      onDelete: deleteSelectedLayer,
+      onDelete: () => {
+        if (templateSession.active) return;
+        deleteSelectedLayer();
+      },
       onMoveMode: () => setEditorMode("drag-select"),
-      onCropMode: () => setEditorMode("crop-select"),
-      onRotateMode: () => setEditorMode("rotate-select"),
-      onFilterMode: () => setEditorMode("filter-adjust"),
-      onShadowMode: () => setEditorMode("shadow-adjust"),
+      onCropMode: () => {
+        if (templateSession.active) return;
+        setEditorMode("crop-select");
+      },
+      onRotateMode: () => {
+        if (templateSession.active) return;
+        setEditorMode("rotate-select");
+      },
+      onFilterMode: () => {
+        if (templateSession.active) return;
+        setEditorMode("filter-adjust");
+      },
+      onShadowMode: () => {
+        if (templateSession.active) return;
+        setEditorMode("shadow-adjust");
+      },
       isCropMode: () => state.mode === "crop-select",
       isRotateMode: () => state.mode === "rotate-select",
       isFilterMode: () => state.mode === "filter-adjust",
@@ -3293,6 +3521,13 @@ class EditorApplication {
       loadImage,
       refresh,
       commitHistory,
+    });
+
+    customTemplateController = createCustomTemplateController({
+      state,
+      createLayer,
+      setSelectedLayer,
+      textTools,
     });
 
     addLayerFlowController.attachDirectDropImport(stage);

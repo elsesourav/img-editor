@@ -99,6 +99,7 @@ export class EditorConstants {
   static TOOLBAR_HINTS = {
     addAction: "Add Layer",
     textAction: "Add Text",
+    customTemplateAction: "Custom Template",
     modeSelect: "Select Mode (M / V)",
     modeCrop: "Crop Mode (C)",
     modeRotate: "Rotate Mode (R)",
@@ -111,6 +112,7 @@ export class EditorConstants {
     upscaleAction: "Upscale 2x",
     deleteAction: "Delete (Delete / Backspace)",
     exportSelected: "Export (Ctrl/Cmd+E)",
+    saveTemplateAction: "Save Template",
     zoomOut: "Zoom Out (Ctrl/Cmd+-)",
     zoomReset: "Reset Zoom (Ctrl/Cmd+0)",
     zoomIn: "Zoom In (Ctrl/Cmd++)",

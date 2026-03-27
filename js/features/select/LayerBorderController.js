@@ -1,14 +1,24 @@
 /**
  * @typedef {Object} LayerBorderDraft
- * @property {number} size
- * @property {string} color
+ * @property {number} size - Border size in editor pixels.
+ * @property {string} color - Border color in #RRGGBB format.
  */
 
 /**
  * @typedef {Object} BorderPreviewPayload
- * @property {string} layerId
- * @property {number} size
- * @property {string} color
+ * @property {string} layerId - Layer receiving preview border.
+ * @property {number} size - Border size in editor pixels.
+ * @property {string} color - Border color in #RRGGBB format.
+ */
+
+/**
+ * @typedef {Object} LayerBorderControllerDeps
+ * @property {(id: string|null|undefined) => any} getLayerById - Resolves a layer by ID.
+ * @property {(preview: BorderPreviewPayload|null) => void} setLayerBorderPreview - Updates border preview state.
+ * @property {(src: string) => Promise<HTMLImageElement>} loadImage - Loads an image element from layer src.
+ * @property {(layer: any) => void} ensureLayerCornerRadius - Normalizes layer corner radius payload.
+ * @property {(layer: any) => {lt:number,rt:number,rb:number,lb:number}} getLayerCornerRadius - Reads corner radius values.
+ * @property {any} state - Global editor state object.
  */
 
 /**
@@ -16,12 +26,7 @@
  */
 export class LayerBorderController {
   /**
-   * @param {Object} deps
-   * @param {(id: string|null|undefined) => any} deps.getLayerById
-   * @param {(preview: BorderPreviewPayload|null) => void} deps.setLayerBorderPreview
-   * @param {(src: string) => Promise<HTMLImageElement>} deps.loadImage
-   * @param {(layer: any) => void} deps.ensureLayerCornerRadius
-   * @param {(layer: any) => {lt:number,rt:number,rb:number,lb:number}} deps.getLayerCornerRadius
+   * @param {LayerBorderControllerDeps} deps - Layer border controller dependencies.
    */
   constructor({
     getLayerById,
@@ -29,7 +34,7 @@ export class LayerBorderController {
     loadImage,
     ensureLayerCornerRadius,
     getLayerCornerRadius,
-      state,
+    state,
   }) {
     this.getLayerById = getLayerById;
     this.setLayerBorderPreview = setLayerBorderPreview;
@@ -46,7 +51,7 @@ export class LayerBorderController {
   }
 
   /**
-   * @returns {LayerBorderDraft}
+   * @return {LayerBorderDraft} - A normalized copy of the current draft.
    */
   getDraft() {
     return {
@@ -56,8 +61,8 @@ export class LayerBorderController {
   }
 
   /**
-   * @param {number} nextSize
-   * @returns {LayerBorderDraft}
+   * @param {number} nextSize - Next border size in editor pixels.
+   * @return {LayerBorderDraft} - Updated normalized draft.
    */
   setDraftSize(nextSize) {
     this.draft.size = this.normalizeSize(nextSize);
@@ -65,8 +70,8 @@ export class LayerBorderController {
   }
 
   /**
-   * @param {string} nextColor
-   * @returns {LayerBorderDraft}
+   * @param {string} nextColor - Next border color value.
+   * @return {LayerBorderDraft} - Updated normalized draft.
    */
   setDraftColor(nextColor) {
     this.draft.color = this.normalizeColor(nextColor);
@@ -74,14 +79,14 @@ export class LayerBorderController {
   }
 
   /**
-   * @returns {void}
+   * @return {void}
    */
   clearDraftSize() {
     this.draft.size = 0;
   }
 
   /**
-   * @returns {boolean}
+   * @return {boolean} - True when draft is valid for apply.
    */
   canApply() {
     return this.normalizeSize(this.draft.size) > 0;
@@ -89,8 +94,8 @@ export class LayerBorderController {
 
   /**
    * Syncs preview outline for the currently selected layer.
-   * @param {string|null} selectedLayerId
-   * @returns {void}
+   * @param {string|null} selectedLayerId - Currently selected layer ID.
+   * @return {void}
    */
   syncPreview(selectedLayerId) {
     const selected = this.getLayerById(selectedLayerId);
@@ -109,9 +114,9 @@ export class LayerBorderController {
   }
 
   /**
-   * Applies a real, baked border by increasing image pixels and layer bounds.
-   * @param {any} selectedLayer
-   * @returns {Promise<void>}
+   * Applies a baked border by increasing image pixels and layer bounds.
+   * @param {any} selectedLayer - Selected layer to mutate.
+   * @return {Promise<void>}
    */
   async applyToLayer(selectedLayer) {
     if (!selectedLayer) return;
@@ -120,14 +125,8 @@ export class LayerBorderController {
     if (draft.size <= 0) return;
 
     const sourceImage = await this.loadImage(selectedLayer.src);
-    const sourceWidth = Math.max(
-      1,
-      sourceImage.naturalWidth || sourceImage.width || 1,
-    );
-    const sourceHeight = Math.max(
-      1,
-      sourceImage.naturalHeight || sourceImage.height || 1,
-    );
+    const sourceWidth = Math.max(1, sourceImage.naturalWidth || sourceImage.width || 1);
+    const sourceHeight = Math.max(1, sourceImage.naturalHeight || sourceImage.height || 1);
     const scaleX = sourceWidth / Math.max(1, selectedLayer.width);
     const scaleY = sourceHeight / Math.max(1, selectedLayer.height);
     const borderX = Math.max(1, Math.round(draft.size * scaleX));
@@ -162,15 +161,15 @@ export class LayerBorderController {
     selectedLayer.width += draft.size * 2;
     selectedLayer.height += draft.size * 2;
 
-      if (
-        this.state?.cropSelection &&
-        this.state.cropSelection.layerId === selectedLayer.id
-      ) {
-        this.state.cropSelection.x = selectedLayer.x;
-        this.state.cropSelection.y = selectedLayer.y;
-        this.state.cropSelection.width = selectedLayer.width;
-        this.state.cropSelection.height = selectedLayer.height;
-      }
+    if (
+      this.state?.cropSelection &&
+      this.state.cropSelection.layerId === selectedLayer.id
+    ) {
+      this.state.cropSelection.x = selectedLayer.x;
+      this.state.cropSelection.y = selectedLayer.y;
+      this.state.cropSelection.width = selectedLayer.width;
+      this.state.cropSelection.height = selectedLayer.height;
+    }
 
     const currentRadius = this.getLayerCornerRadius(selectedLayer);
     selectedLayer.cornerRadius = {
@@ -185,16 +184,16 @@ export class LayerBorderController {
   }
 
   /**
-   * @param {number} value
-   * @returns {number}
+   * @param {number} value - Border size candidate.
+   * @return {number} - Normalized non-negative integer size.
    */
   normalizeSize(value) {
     return Math.max(0, Math.round(Number(value) || 0));
   }
 
   /**
-   * @param {string} value
-   * @returns {string}
+   * @param {string} value - Border color candidate.
+   * @return {string} - Normalized #RRGGBB color.
    */
   normalizeColor(value) {
     const raw = String(value || "").trim().toUpperCase();
@@ -206,8 +205,8 @@ export class LayerBorderController {
   }
 
   /**
-   * @param {string} src
-   * @returns {void}
+   * @param {string} src - Previous layer src.
+   * @return {void}
    */
   revokeBlobUrlIfNeeded(src) {
     if (typeof src === "string" && src.startsWith("blob:")) {

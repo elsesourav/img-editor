@@ -6,8 +6,8 @@ import {
   isLayerDescendantOf,
   setSelectedLayer,
   syncLayerParentingForLayer,
-} from "../../core/LayerStore.js";
-import { state } from "../../core/EditorStateStore.js";
+} from "../../layers.js";
+import { state } from "../../state.js";
 
 function getStagePoint(viewport, clientX, clientY) {
   const zoom = Math.max(0.001, viewport.zoom || 1);

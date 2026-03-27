@@ -111,6 +111,12 @@ body.side-panel-resizing {
   height: 16px;
 }
 
+#customTemplateAction svg,
+#saveTemplateAction svg {
+  width: 18px;
+  height: 18px;
+}
+
 #removeBgAction svg {
   width: 20px;
   height: 20px;
@@ -195,6 +201,48 @@ body.side-panel-resizing {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
   background: radial-gradient(circle at 50% 0%, #1b2623, #101514 48%, #0b0e0e);
+}
+
+body.template-mode #layersSection,
+body.template-mode #sidePanelResizeHandle {
+  display: none;
+}
+
+body.template-mode .layers-panel {
+  grid-template-rows: minmax(140px, 1fr);
+}
+
+body.template-mode #modeCrop,
+body.template-mode #modeRotate,
+body.template-mode #modeFilter,
+body.template-mode #modeShadow,
+body.template-mode #duplicateAction,
+body.template-mode #deleteAction,
+body.template-mode #removeBgAction,
+body.template-mode #upscaleAction {
+  display: none;
+}
+
+.template-input-block {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.template-input-block-title {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(228, 228, 231, 0.82);
+  font-weight: 700;
+}
+
+.template-note {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(228, 228, 231, 0.72);
 }
 
 .layers-panel {
