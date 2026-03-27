@@ -112,7 +112,6 @@ export class EditorConstants {
     upscaleAction: "Upscale 2x",
     deleteAction: "Delete (Delete / Backspace)",
     exportSelected: "Export (Ctrl/Cmd+E)",
-    saveTemplateAction: "Save Template",
     zoomOut: "Zoom Out (Ctrl/Cmd+-)",
     zoomReset: "Reset Zoom (Ctrl/Cmd+0)",
     zoomIn: "Zoom In (Ctrl/Cmd++)",

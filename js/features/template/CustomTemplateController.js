@@ -1,9 +1,11 @@
 import {
   openCustomTemplatePicker,
   openTemplateSaveConfirm,
+  openTemplateSaveOptions,
 } from "./CustomTemplatePopup.js";
 
 const STORAGE_KEY = "img-editor.custom-templates.v1";
+const TEMPLATE_MAX_BYTES = 1024 * 1024;
 
 function cloneValue(value) {
   if (typeof structuredClone === "function") {
@@ -108,12 +110,29 @@ function normalizeImportedTemplate(payload) {
   };
 }
 
-function toLayerSnapshot(layer) {
+function estimateTemplateBytes(template) {
+  try {
+    return new Blob([JSON.stringify(template)]).size;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function createDefaultTemplateName() {
+  const now = Date.now();
+  const stamp = new Date(now);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `Template ${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())} ${pad(stamp.getHours())}:${pad(stamp.getMinutes())}`;
+}
+
+function toLayerSnapshot(layer, isLocked = false) {
+  const kind = layer.textMeta ? "text" : "image";
   return {
     id: String(layer.id),
     name: String(layer.name || ""),
     parentId: layer.parentId ? String(layer.parentId) : null,
-    type: layer.textMeta ? "text" : "image",
+    type: kind,
+    locked: Boolean(isLocked),
     x: sanitizeNumber(layer.x, 0),
     y: sanitizeNumber(layer.y, 0),
     width: sanitizeSize(layer.width, 1),
@@ -142,14 +161,16 @@ function toLayerSnapshot(layer) {
     appliedBorder: layer.appliedBorder ? cloneValue(layer.appliedBorder) : null,
     filters: cloneValue(layer.filters) || null,
     textMeta: layer.textMeta ? cloneValue(layer.textMeta) : null,
+    src: kind === "image" && isLocked ? String(layer.src || "") : null,
   };
 }
 
-function createTemplateFromState({ state }) {
+function createTemplateFromState({ state, name, lockedLayerIds = [] }) {
   const now = Date.now();
+  const lockedSet = new Set(lockedLayerIds.map((value) => String(value)));
   const layers = [...(state.layers || [])]
     .sort((a, b) => (a.zOrder || 0) - (b.zOrder || 0))
-    .map((layer) => toLayerSnapshot(layer));
+    .map((layer) => toLayerSnapshot(layer, lockedSet.has(String(layer.id))));
 
   if (!layers.length) {
     return null;
@@ -169,13 +190,9 @@ function createTemplateFromState({ state }) {
         }
       : null;
 
-  const stamp = new Date(now);
-  const pad = (value) => String(value).padStart(2, "0");
-  const name = `Template ${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())} ${pad(stamp.getHours())}:${pad(stamp.getMinutes())}`;
-
   return {
     id: `tpl-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    name,
+    name: String(name || createDefaultTemplateName()),
     createdAt: now,
     mode: "drag-select",
     selectedLayerId: selectedId,
@@ -248,23 +265,64 @@ function createControllerRuntime({
   }
 
   async function saveCurrentTemplate() {
-    const shouldSave = await openTemplateSaveConfirm();
-    if (!shouldSave) {
-      return false;
+    const orderedLayers = [...(state.layers || [])].sort(
+      (a, b) => (a.zOrder || 0) - (b.zOrder || 0),
+    );
+    if (!orderedLayers.length) {
+      return {
+        saved: false,
+        reason: "no-layers",
+      };
     }
 
-    const nextTemplate = createTemplateFromState({ state });
+    const saveOptions = await openTemplateSaveOptions({
+      defaultName: createDefaultTemplateName(),
+      layers: orderedLayers.map((layer) => ({
+        id: String(layer.id),
+        name: String(layer.name || `Layer ${layer.id}`),
+        kind: layer.textMeta ? "text" : "image",
+        locked: false,
+      })),
+    });
+    if (!saveOptions) {
+      return {
+        saved: false,
+        reason: "canceled",
+      };
+    }
+
+    const nextTemplate = createTemplateFromState({
+      state,
+      name: saveOptions.name,
+      lockedLayerIds: saveOptions.lockedLayerIds,
+    });
     if (!nextTemplate) {
-      return false;
+      return {
+        saved: false,
+        reason: "invalid-template",
+      };
     }
 
     nextTemplate.thumb = await createTinyTemplateThumb({ state, loadImage });
+    const templateBytes = estimateTemplateBytes(nextTemplate);
+    if (templateBytes > TEMPLATE_MAX_BYTES) {
+      return {
+        saved: false,
+        reason: "size-limit",
+        sizeBytes: templateBytes,
+        maxBytes: TEMPLATE_MAX_BYTES,
+      };
+    }
 
     const templates = listTemplates();
     templates.unshift(nextTemplate);
     const limited = templates.slice(0, 40);
     writeTemplateListToStorage(limited);
-    return true;
+    return {
+      saved: true,
+      templateId: nextTemplate.id,
+      templateName: nextTemplate.name,
+    };
   }
 
   async function pickTemplate() {
@@ -365,10 +423,10 @@ function createControllerRuntime({
 
     for (const snapshot of orderedSnapshots) {
       const isText = Boolean(snapshot.textMeta);
-      const src = createTransparentLayerDataUrl(
-        snapshot.width,
-        snapshot.height,
-      );
+      const src =
+        !isText && snapshot.locked && snapshot.src
+          ? String(snapshot.src)
+          : createTransparentLayerDataUrl(snapshot.width, snapshot.height);
       const layer = createLayer(src, snapshot.width, snapshot.height);
 
       layer.name = String(snapshot.name || layer.id);
@@ -457,6 +515,7 @@ function createControllerRuntime({
       layerId: state.layers[index]?.id,
       name: String(snapshot.name || `Layer ${index + 1}`),
       kind: snapshot.textMeta ? "text" : "image",
+      locked: Boolean(snapshot.locked),
       parentId: snapshot.parentId
         ? oldToNewId.get(String(snapshot.parentId)) || null
         : null,
@@ -526,7 +585,7 @@ class CustomTemplateController {
   }
 
   /**
-   * @return {Promise<boolean>}
+   * @return {Promise<{saved:boolean,reason?:string,sizeBytes?:number,maxBytes?:number,templateId?:string,templateName?:string}>}
    */
   async saveCurrentTemplate() {
     return this.impl.saveCurrentTemplate();
@@ -541,7 +600,7 @@ class CustomTemplateController {
 
   /**
    * @param {any} template
-   * @return {{templateId:string,templateName:string,bindings:Array<{layerId:string,name:string,kind:string,parentId:string|null}>}|null}
+   * @return {{templateId:string,templateName:string,bindings:Array<{layerId:string,name:string,kind:string,locked:boolean,parentId:string|null}>}|null}
    */
   applyTemplate(template) {
     return this.impl.applyTemplate(template);

@@ -39,6 +39,19 @@ function ensureStyles() {
       letter-spacing: 0.02em;
     }
 
+    .custom-template-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .custom-template-header-right {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+
     .custom-template-message {
       margin: 0;
       font-size: 12px;
@@ -224,6 +237,70 @@ function ensureStyles() {
       border-color: rgba(167, 243, 208, 0.84);
       background: rgba(16, 185, 129, 0.2);
     }
+
+    .custom-template-save-list {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+      overflow: auto;
+      max-height: min(42vh, 380px);
+      align-content: start;
+    }
+
+    .custom-template-save-item {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .custom-template-save-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .custom-template-save-item-title {
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .custom-template-save-item-kind {
+      font-size: 11px;
+      color: rgba(228, 228, 231, 0.72);
+    }
+
+    .custom-template-lock-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: rgba(228, 228, 231, 0.9);
+      cursor: pointer;
+    }
+
+    .custom-template-help {
+      margin: 0;
+      font-size: 11px;
+      color: rgba(228, 228, 231, 0.72);
+      line-height: 1.4;
+    }
+
+    .custom-template-meta-note {
+      margin: 0;
+      font-size: 11px;
+      color: rgba(228, 228, 231, 0.7);
+      text-align: right;
+    }
   `;
 
   document.head.appendChild(style);
@@ -346,11 +423,15 @@ export function openCustomTemplatePicker(templates) {
 
     overlay.innerHTML = `
       <div class="custom-template-modal" role="dialog" aria-modal="true" aria-label="Custom templates">
-        <h3 class="custom-template-title">Custom Template</h3>
+        <div class="custom-template-header">
+          <h3 class="custom-template-title">Custom Template</h3>
+          <span class="custom-template-header-right">
+            <button type="button" class="custom-template-btn" data-role="import">Import JSON</button>
+          </span>
+        </div>
         <p class="custom-template-message">Choose a saved template to apply layout, filter, crop, and style data.</p>
         <div class="custom-template-list">${itemsMarkup}</div>
         <div class="custom-template-actions">
-          <button type="button" class="custom-template-btn" data-role="import">Import JSON</button>
           <button type="button" class="custom-template-btn" data-role="cancel">Close</button>
         </div>
       </div>
@@ -446,6 +527,113 @@ export function openCustomTemplatePicker(templates) {
       if (event.target !== overlay) return;
       close(null);
     });
+  });
+}
+
+/**
+ * Opens advanced save popup for template layer lock setup.
+ * @param {{defaultName:string,layers:Array<{id:string,name:string,kind:"image"|"text",locked:boolean}>}} options - Save options.
+ * @return {Promise<{name:string,lockedLayerIds:string[]}|null>} - Save payload.
+ */
+export function openTemplateSaveOptions({ defaultName = "", layers = [] }) {
+  ensureStyles();
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "custom-template-overlay";
+
+    const rowsMarkup = layers.length
+      ? layers
+          .map(
+            (layer) => `
+              <div class="custom-template-save-item" data-layer-id="${layer.id}">
+                <div class="custom-template-save-item-row">
+                  <span class="custom-template-save-item-title">${layer.name || "Layer"}</span>
+                  <span class="custom-template-save-item-kind">${layer.kind}</span>
+                </div>
+                <label class="custom-template-lock-label">
+                  <input type="checkbox" data-role="lock" data-layer-id="${layer.id}" ${layer.locked ? "checked" : ""} />
+                  Lock this layer (save current content)
+                </label>
+              </div>
+            `,
+          )
+          .join("")
+      : '<div class="custom-template-empty">No layers available to save.</div>';
+
+    overlay.innerHTML = `
+      <div class="custom-template-modal" role="dialog" aria-modal="true" aria-label="Save template options">
+        <h3 class="custom-template-title">Save Template</h3>
+        <p class="custom-template-help">Locked layers keep current image/text inside the template and hide input fields later. Unlocked layers stay editable in template mode.</p>
+        <input data-role="name" class="custom-template-name-input" type="text" maxlength="80" value="${String(defaultName).replace(/"/g, "&quot;")}" />
+        <div class="custom-template-save-list">${rowsMarkup}</div>
+        <p class="custom-template-meta-note">Max template size: 1 MB</p>
+        <div class="custom-template-actions">
+          <button type="button" class="custom-template-btn" data-role="cancel">Cancel</button>
+          <button type="button" class="custom-template-btn primary" data-role="save">Save Template</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    const nameInput = overlay.querySelector('[data-role="name"]');
+
+    const close = (result) => {
+      window.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+      resolve(result);
+    };
+
+    const submit = () => {
+      const name = String(nameInput?.value || "").trim();
+      if (!name) {
+        close(null);
+        return;
+      }
+
+      const lockedLayerIds = [];
+      overlay.querySelectorAll('[data-role="lock"]').forEach((input) => {
+        if (!(input instanceof HTMLInputElement)) return;
+        if (!input.checked) return;
+        const layerId = String(input.getAttribute("data-layer-id") || "");
+        if (!layerId) return;
+        lockedLayerIds.push(layerId);
+      });
+
+      close({
+        name,
+        lockedLayerIds,
+      });
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(null);
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    overlay
+      .querySelector('[data-role="cancel"]')
+      .addEventListener("click", () => close(null));
+    overlay
+      .querySelector('[data-role="save"]')
+      .addEventListener("click", submit);
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      close(null);
+    });
+
+    if (nameInput) {
+      nameInput.focus();
+      nameInput.select();
+    }
   });
 }
 

@@ -111,8 +111,7 @@ body.side-panel-resizing {
   height: 16px;
 }
 
-#customTemplateAction svg,
-#saveTemplateAction svg {
+#customTemplateAction svg {
   width: 18px;
   height: 18px;
 }
@@ -268,6 +267,31 @@ body.template-mode #upscaleAction {
   margin: 0;
   font-size: 11px;
   color: rgba(228, 228, 231, 0.72);
+}
+
+.template-upload-control {
+  display: grid;
+  gap: 6px;
+}
+
+.template-dropzone {
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 9px 10px;
+  font-size: 11px;
+  color: rgba(228, 228, 231, 0.8);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.template-dropzone:hover,
+.template-dropzone.drag-over {
+  border-color: rgba(167, 243, 208, 0.84);
+  background: rgba(16, 185, 129, 0.16);
 }
 
 .layers-panel {

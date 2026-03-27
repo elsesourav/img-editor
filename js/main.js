@@ -133,7 +133,6 @@ class EditorApplication {
     const upscaleAction = document.getElementById("upscaleAction");
     const deleteAction = document.getElementById("deleteAction");
     const exportSelected = document.getElementById("exportSelected");
-    const saveTemplateAction = document.getElementById("saveTemplateAction");
     const zoomOut = document.getElementById("zoomOut");
     const zoomReset = document.getElementById("zoomReset");
     const zoomIn = document.getElementById("zoomIn");
@@ -1140,6 +1139,29 @@ class EditorApplication {
 
         if (!exportOptions) return;
 
+        if (exportOptions.action === "save-template") {
+          if (!customTemplateController) return;
+          const saveResult = await customTemplateController.saveCurrentTemplate();
+          if (saveResult?.saved) {
+            showTemplateToast("Template saved successfully");
+            return;
+          }
+
+          if (saveResult?.reason === "size-limit") {
+            showTemplateToast("Template too large. Lock fewer image layers.", {
+              durationMs: 2600,
+            });
+            return;
+          }
+
+          if (saveResult?.reason !== "canceled") {
+            showTemplateToast("Template was not saved", {
+              durationMs: 2100,
+            });
+          }
+          return;
+        }
+
         const finalCanvas = resizeCanvasWithQuality(
           canvas,
           exportOptions.width,
@@ -1456,6 +1478,10 @@ class EditorApplication {
       appendOptionDivider();
 
       for (const binding of templateSession.bindings) {
+        if (binding.locked) {
+          continue;
+        }
+
         const layer = getLayerById(binding.layerId);
         if (!layer) continue;
 
@@ -1481,8 +1507,9 @@ class EditorApplication {
           const imageInput = document.createElement("input");
           imageInput.type = "file";
           imageInput.accept = "image/*";
-          imageInput.addEventListener("change", () => {
-            const file = imageInput.files?.[0];
+          imageInput.hidden = true;
+
+          const applyImageFile = (file) => {
             if (!file || !customTemplateController) return;
 
             void customTemplateController
@@ -1495,8 +1522,39 @@ class EditorApplication {
               .catch((error) => {
                 console.error("Template image apply failed", error);
               });
+          };
+
+          imageInput.addEventListener("change", () => {
+            const file = imageInput.files?.[0];
+            applyImageFile(file);
           });
-          block.appendChild(createOptionRow("Image", imageInput));
+
+          const dropZone = document.createElement("div");
+          dropZone.className = "template-dropzone";
+          dropZone.textContent = "Drop image here or click to upload";
+          dropZone.addEventListener("click", () => {
+            imageInput.click();
+          });
+          dropZone.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            dropZone.classList.add("drag-over");
+          });
+          dropZone.addEventListener("dragleave", () => {
+            dropZone.classList.remove("drag-over");
+          });
+          dropZone.addEventListener("drop", (event) => {
+            event.preventDefault();
+            dropZone.classList.remove("drag-over");
+            const file = event.dataTransfer?.files?.[0];
+            if (!file || !file.type.startsWith("image/")) return;
+            applyImageFile(file);
+          });
+
+          const imageRowValue = document.createElement("div");
+          imageRowValue.className = "template-upload-control";
+          imageRowValue.appendChild(imageInput);
+          imageRowValue.appendChild(dropZone);
+          block.appendChild(createOptionRow("Image", imageRowValue));
         }
 
         if (binding.kind === "text" && layer.textMeta) {
@@ -1529,6 +1587,16 @@ class EditorApplication {
       }
 
       appendOptionDivider();
+      if (!templateSession.bindings.some((binding) => !binding.locked)) {
+        const lockedInfo = document.createElement("p");
+        lockedInfo.className = "template-note";
+        lockedInfo.textContent = "All template layers are locked. No editable inputs for this template.";
+        const lockedInfoRow = createOptionRow("", lockedInfo);
+        lockedInfoRow.classList.add("full");
+        optionsPanel.appendChild(lockedInfoRow);
+        appendOptionDivider();
+      }
+
       const exitButton = document.createElement("button");
       exitButton.type = "button";
       exitButton.className = "button option-button";
@@ -2535,7 +2603,6 @@ class EditorApplication {
         ["upscaleAction", upscaleAction],
         ["deleteAction", deleteAction],
         ["exportSelected", exportSelected],
-        ["saveTemplateAction", saveTemplateAction],
         ["zoomOut", zoomOut],
         ["zoomReset", zoomReset],
         ["zoomIn", zoomIn],
@@ -3385,21 +3452,6 @@ class EditorApplication {
 
     exportSelected.addEventListener("click", () => {
       void exportSelectedImage();
-    });
-
-    saveTemplateAction?.addEventListener("click", () => {
-      if (!customTemplateController) return;
-
-      void customTemplateController
-        .saveCurrentTemplate()
-        .then((saved) => {
-          if (!saved) return;
-          showTemplateToast("Template saved successfully");
-        })
-        .catch((error) => {
-          console.error("Failed to save template", error);
-          window.alert("Unable to save template.");
-        });
     });
 
     customTemplateAction?.addEventListener("click", () => {

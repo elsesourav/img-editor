@@ -155,8 +155,15 @@ function ensureStyles() {
 
     .export-popup-actions {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
       gap: 8px;
+    }
+
+    .export-popup-actions-right {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
     }
 
     .export-popup-btn {
@@ -281,8 +288,11 @@ function openExportPopupRuntime({ width, height }) {
         </div>
 
         <div class="export-popup-actions">
-          <button type="button" class="export-popup-btn" data-role="cancel">Cancel</button>
-          <button type="button" class="export-popup-btn primary" data-role="confirm">Export</button>
+          <button type="button" class="export-popup-btn" data-role="saveTemplate">Save Template</button>
+          <span class="export-popup-actions-right">
+            <button type="button" class="export-popup-btn" data-role="cancel">Cancel</button>
+            <button type="button" class="export-popup-btn primary" data-role="confirm">Export</button>
+          </span>
         </div>
       </div>
     `;
@@ -302,6 +312,9 @@ function openExportPopupRuntime({ width, height }) {
     const formatNote = overlay.querySelector('[data-role="formatNote"]');
     const tabQuality = overlay.querySelector('[data-role="tabQuality"]');
     const tabTarget = overlay.querySelector('[data-role="tabTarget"]');
+    const saveTemplateButton = overlay.querySelector(
+      '[data-role="saveTemplate"]',
+    );
     const cancelButton = overlay.querySelector('[data-role="cancel"]');
     const confirmButton = overlay.querySelector('[data-role="confirm"]');
     let currentMode = "quality";
@@ -449,6 +462,9 @@ function openExportPopupRuntime({ width, height }) {
     targetUnit.addEventListener("change", updateTargetRangeByUnit);
 
     cancelButton.addEventListener("click", () => close(null));
+    saveTemplateButton.addEventListener("click", () => {
+      close({ action: "save-template" });
+    });
     overlay.addEventListener("click", (event) => {
       if (event.target !== overlay) return;
       close(null);
@@ -470,6 +486,7 @@ function openExportPopupRuntime({ width, height }) {
           : Math.round(targetSizeValue * 1024);
 
       close({
+        action: "export",
         width: exportWidth,
         height: exportHeight,
         mode,
