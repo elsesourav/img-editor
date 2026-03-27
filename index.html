@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plain Editor</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="editor-root">
+      <header class="editor-header">
+        <div class="toolbar">
+          <div class="box">
+            <button
+              id="addAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Add layer"
+              data-hint="Add Layer"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-add" />
+              </svg>
+            </button>
+            <button
+              id="textAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Add text layer"
+              data-hint="Add Text"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-text" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="box">
+            <button
+              id="modeSelect"
+              class="button icon-only active"
+              type="button"
+              aria-label="Select mode"
+              data-hint="Select Mode (M / V)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-move" />
+              </svg>
+            </button>
+            <button
+              id="modeCrop"
+              class="button icon-only"
+              type="button"
+              aria-label="Crop mode"
+              data-hint="Crop Mode (C)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-crop" />
+              </svg>
+            </button>
+            <button
+              id="modeRotate"
+              class="button icon-only"
+              type="button"
+              aria-label="Rotate mode"
+              data-hint="Rotate Mode (R)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-rotate" />
+              </svg>
+            </button>
+            <button
+              id="modeFilter"
+              class="button icon-only"
+              type="button"
+              aria-label="Filter mode"
+              data-hint="Filter Mode (F)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-filter" />
+              </svg>
+            </button>
+            <button
+              id="modeShadow"
+              class="button icon-only"
+              type="button"
+              aria-label="Shadow mode"
+              data-hint="Shadow Mode (H)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-shadow" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="box">
+            <button
+              id="undoAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Undo"
+              data-hint="Undo (Ctrl/Cmd+Z)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-undo" />
+              </svg>
+            </button>
+            <button
+              id="redoAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Redo"
+              data-hint="Redo (Ctrl/Cmd+Shift+Z)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-redo" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="box">
+            <button
+              id="duplicateAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Duplicate"
+              data-hint="Duplicate (Ctrl/Cmd+D)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-duplicate" />
+              </svg>
+            </button>
+            <button
+              id="deleteAction"
+              class="button icon-only danger-button"
+              type="button"
+              aria-label="Delete"
+              data-hint="Delete (Delete / Backspace)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-delete" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="box">
+            <button
+              id="removeBgAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Remove background"
+              data-hint="Remove Background"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-remove-bg" />
+              </svg>
+            </button>
+            <button
+              id="upscaleAction"
+              class="button icon-only"
+              type="button"
+              aria-label="Upscale image"
+              data-hint="Upscale 2x"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-upscale" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="box">
+            <button
+              id="exportSelected"
+              class="button icon-only"
+              type="button"
+              aria-label="Export"
+              data-hint="Export (Ctrl/Cmd+E)"
+            >
+              <svg aria-hidden="true">
+                <use href="./assets/icons/toolbar-icons.svg#icon-export" />
+              </svg>
+            </button>
+
+            <div class="zoom-controls" aria-label="Editor zoom controls">
+              <button
+                id="zoomOut"
+                class="button icon-only"
+                type="button"
+                aria-label="Zoom out"
+                data-hint="Zoom Out (Ctrl/Cmd+-)"
+              >
+                <svg aria-hidden="true">
+                  <use href="./assets/icons/toolbar-icons.svg#icon-zoom-out" />
+                </svg>
+              </button>
+              <button
+                id="zoomReset"
+                class="button icon-only"
+                type="button"
+                aria-label="Reset zoom"
+                data-hint="Reset Zoom (Ctrl/Cmd+0)"
+              >
+                <svg aria-hidden="true">
+                  <use
+                    href="./assets/icons/toolbar-icons.svg#icon-zoom-reset"
+                  />
+                </svg>
+              </button>
+              <button
+                id="zoomIn"
+                class="button icon-only"
+                type="button"
+                aria-label="Zoom in"
+                data-hint="Zoom In (Ctrl/Cmd++)"
+              >
+                <svg aria-hidden="true">
+                  <use href="./assets/icons/toolbar-icons.svg#icon-zoom-in" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="editor-main">
+        <section class="editor-stage" id="editorStage">
+          <div class="editor-grid"></div>
+          <div id="layerRoot" class="layer-root"></div>
+          <div id="selectionBox" class="selection-box" aria-hidden="true">
+            <div
+              class="rotate-handle"
+              id="rotateHandle"
+              title="Drag to rotate"
+            ></div>
+            <div class="selection-handle nw" data-select-handle="nw"></div>
+            <div class="selection-handle ne" data-select-handle="ne"></div>
+            <div class="selection-handle sw" data-select-handle="sw"></div>
+            <div class="selection-handle se" data-select-handle="se"></div>
+            <div class="selection-handle n" data-select-handle="n"></div>
+            <div class="selection-handle e" data-select-handle="e"></div>
+            <div class="selection-handle s" data-select-handle="s"></div>
+            <div class="selection-handle w" data-select-handle="w"></div>
+          </div>
+          <div id="cropBox" class="crop-box" aria-hidden="true">
+            <div class="crop-handle nw" data-crop-handle="nw"></div>
+            <div class="crop-handle ne" data-crop-handle="ne"></div>
+            <div class="crop-handle sw" data-crop-handle="sw"></div>
+            <div class="crop-handle se" data-crop-handle="se"></div>
+            <div class="crop-handle n" data-crop-handle="n"></div>
+            <div class="crop-handle e" data-crop-handle="e"></div>
+            <div class="crop-handle s" data-crop-handle="s"></div>
+            <div class="crop-handle w" data-crop-handle="w"></div>
+          </div>
+          <div id="marquee" class="marquee" aria-hidden="true"></div>
+          <div class="hint">
+            Drag empty area to move all layers. Use Ctrl + wheel or +/- to zoom
+            editor.
+          </div>
+        </section>
+
+        <aside class="layers-panel" aria-label="Editor side panel">
+          <section
+            id="optionsSection"
+            class="side-section options-section"
+            aria-label="Options panel"
+          >
+            <h2 id="optionsTitle" class="layers-title">Options</h2>
+            <div id="optionsPanel" class="options-list"></div>
+          </section>
+          <div
+            id="sidePanelResizeHandle"
+            class="side-panel-resize-handle"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize options and layers panel"
+          ></div>
+          <section
+            id="layersSection"
+            class="side-section layers-section"
+            aria-label="Layers panel"
+          >
+            <h2 class="layers-title">Layers</h2>
+            <div id="layersList" class="layers-list"></div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>
