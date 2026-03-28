@@ -149,7 +149,9 @@ export function getLayerShadowStyle(layer) {
   const opacity = normalizeFilterNumber(current.opacity, 45, 0, 100);
   const strokeSize = normalizeFilterNumber(current.strokeSize, 0, 0, 20);
   const strokeOpacity = normalizeFilterNumber(
-    current.strokeOpacity,
+    Number.isFinite(Number(current.strokeOpacity))
+      ? current.strokeOpacity
+      : current.bgOpacity,
     100,
     0,
     100,

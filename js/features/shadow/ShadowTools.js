@@ -56,7 +56,9 @@ function createShadowToolsRuntime({
       strokeColor: normalizeHexColor(current.strokeColor, defaults.strokeColor),
       strokeOpacity: Number.isFinite(Number(current.strokeOpacity))
         ? Math.max(0, Math.min(100, Number(current.strokeOpacity)))
-        : defaults.strokeOpacity,
+        : Number.isFinite(Number(current.bgOpacity))
+          ? Math.max(0, Math.min(100, Number(current.bgOpacity)))
+          : defaults.strokeOpacity,
     };
   }
 
@@ -197,7 +199,7 @@ function createShadowToolsRuntime({
     });
     optionsPanel.appendChild(createOptionRow("Stroke Color", strokeColorInput));
 
-    addShadowControl("BG Opacity", "strokeOpacity", 0, 100, 1);
+    addShadowControl("Opacity", "strokeOpacity", 0, 100, 1);
 
     appendOptionDivider();
 

@@ -1,4 +1,15 @@
 import {
+  buildLayerFilterString,
+  ensureLayerFilterDefaults,
+  getDefaultLayerFilters,
+  getLayerInsetShadow,
+  getLayerShadowStyle,
+} from "../../core/LayerStore.js";
+import {
+  buildObjectStrokeFilterChain,
+  renderFilteredLayerToCanvas,
+} from "../../utils/image-canvas.js";
+import {
   openCustomTemplatePicker,
   openTemplateSaveConfirm,
   openTemplateSaveOptions,
@@ -38,6 +49,122 @@ function createTransparentLayerDataUrl(width, height) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  return canvas.toDataURL("image/png");
+}
+
+function normalizeTemplateImageFitMode(value) {
+  const mode = String(value || "stretch").toLowerCase();
+  if (mode === "contain" || mode === "cover") {
+    return mode;
+  }
+  return "stretch";
+}
+
+async function renderSourceToLayerSizedDataUrl(
+  source,
+  width,
+  height,
+  loadImage,
+  fitMode = "stretch",
+) {
+  const safeWidth = sanitizeSize(width, 1);
+  const safeHeight = sanitizeSize(height, 1);
+  if (!source || typeof loadImage !== "function") {
+    return String(source || "");
+  }
+
+  try {
+    const image = await loadImage(String(source));
+    const canvas = document.createElement("canvas");
+    canvas.width = safeWidth;
+    canvas.height = safeHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return String(source);
+    }
+
+    const resolvedFitMode = normalizeTemplateImageFitMode(fitMode);
+    const imageWidth = Math.max(1, image.naturalWidth || image.width || 1);
+    const imageHeight = Math.max(1, image.naturalHeight || image.height || 1);
+
+    ctx.clearRect(0, 0, safeWidth, safeHeight);
+    if (resolvedFitMode === "stretch") {
+      ctx.drawImage(image, 0, 0, safeWidth, safeHeight);
+    } else {
+      const scale =
+        resolvedFitMode === "cover"
+          ? Math.max(safeWidth / imageWidth, safeHeight / imageHeight)
+          : Math.min(safeWidth / imageWidth, safeHeight / imageHeight);
+      const drawWidth = Math.max(1, Math.round(imageWidth * scale));
+      const drawHeight = Math.max(1, Math.round(imageHeight * scale));
+      const drawX = Math.round((safeWidth - drawWidth) / 2);
+      const drawY = Math.round((safeHeight - drawHeight) / 2);
+      ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+    }
+
+    return canvas.toDataURL("image/png");
+  } catch {
+    return String(source);
+  }
+}
+
+async function renderLockedLayerVisualDataUrl(layer, loadImage) {
+  const fitMode = normalizeTemplateImageFitMode(layer.templateImageFitMode);
+  const normalizedSrc = await renderSourceToLayerSizedDataUrl(
+    layer.src,
+    layer.width,
+    layer.height,
+    loadImage,
+    fitMode,
+  );
+
+  const previewLayer = {
+    ...layer,
+    src: normalizedSrc,
+    width: sanitizeSize(layer.width, 1),
+    height: sanitizeSize(layer.height, 1),
+  };
+
+  const filteredCanvas = await renderFilteredLayerToCanvas(previewLayer, {
+    ensureLayerDefaults: ensureLayerFilterDefaults,
+    buildLayerFilterString,
+    getLayerInsetShadow,
+  });
+
+  const shadowStyle = getLayerShadowStyle(previewLayer);
+  const shouldRenderObjectShadow =
+    shadowStyle.enabled && shadowStyle.resolvedMode === "object";
+  if (!shouldRenderObjectShadow) {
+    return filteredCanvas.toDataURL("image/png");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = filteredCanvas.width;
+  canvas.height = filteredCanvas.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return filteredCanvas.toDataURL("image/png");
+  }
+
+  const filterParts = [];
+  if (shadowStyle.strokeSize > 0) {
+    const strokeFilter = buildObjectStrokeFilterChain(
+      shadowStyle.strokeSize,
+      shadowStyle.strokeCssColor || shadowStyle.strokeColor,
+      { isTextLayer: Boolean(previewLayer.textMeta) },
+    );
+    if (strokeFilter) {
+      filterParts.push(strokeFilter);
+    }
+  }
+  filterParts.push(
+    `drop-shadow(${shadowStyle.x}px ${shadowStyle.y}px ${shadowStyle.blur}px ${shadowStyle.cssColor})`,
+  );
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.filter = filterParts.length ? filterParts.join(" ") : "none";
+  ctx.drawImage(filteredCanvas, 0, 0, canvas.width, canvas.height);
+  ctx.filter = "none";
   return canvas.toDataURL("image/png");
 }
 
@@ -125,8 +252,30 @@ function createDefaultTemplateName() {
   return `Template ${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())} ${pad(stamp.getHours())}:${pad(stamp.getMinutes())}`;
 }
 
-function toLayerSnapshot(layer, isLocked = false) {
-  const kind = layer.textMeta ? "text" : "image";
+async function toLayerSnapshot(layer, isLocked = false, loadImage) {
+  const isSourceText = Boolean(layer.textMeta);
+  const kind = isSourceText && !isLocked ? "text" : "image";
+  const imageFitMode = normalizeTemplateImageFitMode(
+    layer.templateImageFitMode,
+  );
+  let lockedSnapshotSrc = null;
+  if (isLocked) {
+    lockedSnapshotSrc = await renderLockedLayerVisualDataUrl(layer, loadImage);
+  }
+
+  const defaultShadowStyle = {
+    enabled: false,
+    mode: "object",
+    x: 0,
+    y: 0,
+    blur: 5,
+    opacity: 45,
+    color: "#000000",
+    strokeSize: 0,
+    strokeColor: "#000000",
+    strokeOpacity: 100,
+  };
+
   return {
     id: String(layer.id),
     name: String(layer.name || ""),
@@ -147,31 +296,36 @@ function toLayerSnapshot(layer, isLocked = false) {
       rb: 0,
       lb: 0,
     },
-    shadowStyle: cloneValue(layer.shadowStyle) || {
-      enabled: false,
-      mode: "object",
-      x: 0,
-      y: 0,
-      blur: 5,
-      opacity: 45,
-      color: "#000000",
-      strokeSize: 0,
-      strokeColor: "#000000",
-      strokeOpacity: 100,
-    },
+    shadowStyle: isLocked
+      ? defaultShadowStyle
+      : cloneValue(layer.shadowStyle) || defaultShadowStyle,
     appliedBorder: layer.appliedBorder ? cloneValue(layer.appliedBorder) : null,
-    filters: cloneValue(layer.filters) || null,
-    textMeta: layer.textMeta ? cloneValue(layer.textMeta) : null,
-    src: kind === "image" && isLocked ? String(layer.src || "") : null,
+    filters: isLocked
+      ? getDefaultLayerFilters()
+      : cloneValue(layer.filters) || null,
+    textMeta: kind === "text" ? cloneValue(layer.textMeta) : null,
+    imageFitMode: kind === "image" ? imageFitMode : undefined,
+    src: lockedSnapshotSrc,
   };
 }
 
-function createTemplateFromState({ state, name, lockedLayerIds = [] }) {
+async function createTemplateFromState({
+  state,
+  name,
+  lockedLayerIds = [],
+  loadImage,
+}) {
   const now = Date.now();
   const lockedSet = new Set(lockedLayerIds.map((value) => String(value)));
-  const layers = [...(state.layers || [])]
-    .sort((a, b) => (a.zOrder || 0) - (b.zOrder || 0))
-    .map((layer) => toLayerSnapshot(layer, lockedSet.has(String(layer.id))));
+  const orderedLayers = [...(state.layers || [])].sort(
+    (a, b) => (a.zOrder || 0) - (b.zOrder || 0),
+  );
+  const layers = [];
+  for (const layer of orderedLayers) {
+    layers.push(
+      await toLayerSnapshot(layer, lockedSet.has(String(layer.id)), loadImage),
+    );
+  }
 
   if (!layers.length) {
     return null;
@@ -292,10 +446,11 @@ function createControllerRuntime({
       };
     }
 
-    const nextTemplate = createTemplateFromState({
+    const nextTemplate = await createTemplateFromState({
       state,
       name: saveOptions.name,
       lockedLayerIds: saveOptions.lockedLayerIds,
+      loadImage,
     });
     if (!nextTemplate) {
       return {
@@ -424,6 +579,7 @@ function createControllerRuntime({
 
     for (const snapshot of orderedSnapshots) {
       const isText = Boolean(snapshot.textMeta);
+      const imageFitMode = normalizeTemplateImageFitMode(snapshot.imageFitMode);
       const src =
         !isText && snapshot.locked && snapshot.src
           ? String(snapshot.src)
@@ -453,6 +609,9 @@ function createControllerRuntime({
       }
       if (snapshot.filters) {
         layer.filters = cloneValue(snapshot.filters);
+      }
+      if (!isText) {
+        layer.templateImageFitMode = imageFitMode;
       }
 
       if (isText) {
@@ -517,6 +676,9 @@ function createControllerRuntime({
       name: String(snapshot.name || `Layer ${index + 1}`),
       kind: snapshot.textMeta ? "text" : "image",
       locked: Boolean(snapshot.locked),
+      fitMode: snapshot.textMeta
+        ? undefined
+        : normalizeTemplateImageFitMode(snapshot.imageFitMode),
       parentId: snapshot.parentId
         ? oldToNewId.get(String(snapshot.parentId)) || null
         : null,
@@ -529,7 +691,7 @@ function createControllerRuntime({
     };
   }
 
-  async function applyImageFileToLayer(layerId, file) {
+  async function applyImageFileToLayer(layerId, file, options = {}) {
     if (!layerId || !file) return false;
     const layer = state.layers.find((item) => item.id === layerId);
     if (!layer) return false;
@@ -541,7 +703,18 @@ function createControllerRuntime({
       reader.readAsDataURL(file);
     });
 
-    layer.src = dataUrl;
+    const fitMode = normalizeTemplateImageFitMode(
+      options.fitMode || layer.templateImageFitMode,
+    );
+    layer.templateImageFitMode = fitMode;
+
+    layer.src = await renderSourceToLayerSizedDataUrl(
+      dataUrl,
+      layer.width,
+      layer.height,
+      loadImage,
+      fitMode,
+    );
     return true;
   }
 
@@ -619,10 +792,11 @@ class CustomTemplateController {
   /**
    * @param {string} layerId
    * @param {File} file
+   * @param {{fitMode?:"stretch"|"contain"|"cover"}} [options]
    * @return {Promise<boolean>}
    */
-  async applyImageFileToLayer(layerId, file) {
-    return this.impl.applyImageFileToLayer(layerId, file);
+  async applyImageFileToLayer(layerId, file, options) {
+    return this.impl.applyImageFileToLayer(layerId, file, options);
   }
 
   /**

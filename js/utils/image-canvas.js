@@ -348,6 +348,7 @@ export async function renderCompositeLayersToCanvas(
   {
     fillBackground = false,
     buildLayerFilterString,
+    getLayerShadowStyle,
     getLayerInsetShadow,
     getAncestorVisibleRectForRegion,
   },
@@ -402,7 +403,33 @@ export async function renderCompositeLayersToCanvas(
   for (const entry of loadedEntries) {
     const layer = entry.layer;
     const img = entry.img;
-    const filterString = buildLayerFilterString(layer);
+    const baseFilterString = buildLayerFilterString(layer);
+    const filterParts = [];
+    if (baseFilterString && baseFilterString !== "none") {
+      filterParts.push(baseFilterString);
+    }
+
+    if (typeof getLayerShadowStyle === "function") {
+      const layerShadow = getLayerShadowStyle(layer);
+      if (layerShadow.enabled && layerShadow.resolvedMode === "object") {
+        if (layerShadow.strokeSize > 0) {
+          const strokeFilter = buildObjectStrokeFilterChain(
+            layerShadow.strokeSize,
+            layerShadow.strokeCssColor || layerShadow.strokeColor,
+            { isTextLayer: Boolean(layer.textMeta) },
+          );
+          if (strokeFilter) {
+            filterParts.push(strokeFilter);
+          }
+        }
+
+        filterParts.push(
+          `drop-shadow(${layerShadow.x}px ${layerShadow.y}px ${layerShadow.blur}px ${layerShadow.cssColor})`,
+        );
+      }
+    }
+
+    const filterString = filterParts.length ? filterParts.join(" ") : "none";
 
     const layerRect = getRectFromLayer(layer);
     const clippedByRegion = intersectRect(layerRect, regionRect);
@@ -447,7 +474,7 @@ export async function renderCompositeLayersToCanvas(
         img,
         drawWidth,
         drawHeight,
-        filterString,
+        baseFilterString,
         insetShadow,
       );
       ctx.drawImage(shadowCanvas, drawX, drawY, drawWidth, drawHeight);

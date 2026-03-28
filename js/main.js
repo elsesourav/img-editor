@@ -640,6 +640,7 @@ class EditorApplication {
       return renderCompositeLayersToCanvasUtil(baseLayer, layers, regionRect, {
         fillBackground,
         buildLayerFilterString,
+        getLayerShadowStyle,
         getLayerInsetShadow,
         getAncestorVisibleRectForRegion,
       });
@@ -1169,16 +1170,12 @@ class EditorApplication {
 
         const originalLayer = {
           src: batchState.layer.src,
-          width: batchState.layer.width,
-          height: batchState.layer.height,
         };
 
         try {
           for (let index = 0; index < batchState.uploads.length; index += 1) {
             const upload = batchState.uploads[index];
             batchState.layer.src = upload.src;
-            batchState.layer.width = Math.max(MIN_LAYER_SIZE, upload.width);
-            batchState.layer.height = Math.max(MIN_LAYER_SIZE, upload.height);
 
             const snapshot = buildExportSnapshot();
             if (!snapshot) continue;
@@ -1235,8 +1232,6 @@ class EditorApplication {
           return true;
         } finally {
           batchState.layer.src = originalLayer.src;
-          batchState.layer.width = originalLayer.width;
-          batchState.layer.height = originalLayer.height;
           refresh({ rerenderOptions: false, rerenderLayersPanel: false });
         }
       };
@@ -1692,6 +1687,23 @@ class EditorApplication {
         if (binding.kind === "image") {
           const allowBatchUpload =
             singleEditableImageBinding?.layerId === layer.id;
+          const getResolvedFitMode = () => {
+            const layerMode = String(
+              layer.templateImageFitMode || "",
+            ).toLowerCase();
+            if (layerMode === "contain" || layerMode === "cover") {
+              return layerMode;
+            }
+            const bindingMode = String(binding.fitMode || "").toLowerCase();
+            if (bindingMode === "contain" || bindingMode === "cover") {
+              return bindingMode;
+            }
+            return "stretch";
+          };
+          const clearTemplateBatchQueue = () => {
+            templateSession.batchImageLayerId = null;
+            templateSession.batchImageUploads = [];
+          };
 
           const imageInput = document.createElement("input");
           imageInput.type = "file";
@@ -1706,17 +1718,79 @@ class EditorApplication {
                 const src = String(reader.result || "");
                 try {
                   const image = await loadImage(src);
+                  const fitMode = getResolvedFitMode();
+                  const normalizedCanvas = document.createElement("canvas");
+                  normalizedCanvas.width = Math.max(
+                    MIN_LAYER_SIZE,
+                    Math.round(layer.width),
+                  );
+                  normalizedCanvas.height = Math.max(
+                    MIN_LAYER_SIZE,
+                    Math.round(layer.height),
+                  );
+                  const normalizedCtx = normalizedCanvas.getContext("2d");
+                  if (normalizedCtx) {
+                    normalizedCtx.clearRect(
+                      0,
+                      0,
+                      normalizedCanvas.width,
+                      normalizedCanvas.height,
+                    );
+                    if (fitMode === "stretch") {
+                      normalizedCtx.drawImage(
+                        image,
+                        0,
+                        0,
+                        normalizedCanvas.width,
+                        normalizedCanvas.height,
+                      );
+                    } else {
+                      const imageWidth = Math.max(
+                        1,
+                        image.naturalWidth || image.width || 1,
+                      );
+                      const imageHeight = Math.max(
+                        1,
+                        image.naturalHeight || image.height || 1,
+                      );
+                      const scale =
+                        fitMode === "cover"
+                          ? Math.max(
+                              normalizedCanvas.width / imageWidth,
+                              normalizedCanvas.height / imageHeight,
+                            )
+                          : Math.min(
+                              normalizedCanvas.width / imageWidth,
+                              normalizedCanvas.height / imageHeight,
+                            );
+                      const drawWidth = Math.max(
+                        1,
+                        Math.round(imageWidth * scale),
+                      );
+                      const drawHeight = Math.max(
+                        1,
+                        Math.round(imageHeight * scale),
+                      );
+                      const drawX = Math.round(
+                        (normalizedCanvas.width - drawWidth) / 2,
+                      );
+                      const drawY = Math.round(
+                        (normalizedCanvas.height - drawHeight) / 2,
+                      );
+                      normalizedCtx.drawImage(
+                        image,
+                        drawX,
+                        drawY,
+                        drawWidth,
+                        drawHeight,
+                      );
+                    }
+                  }
                   resolve({
                     name: file.name,
-                    src,
-                    width: Math.max(
-                      MIN_LAYER_SIZE,
-                      image.naturalWidth || image.width || layer.width,
-                    ),
-                    height: Math.max(
-                      MIN_LAYER_SIZE,
-                      image.naturalHeight || image.height || layer.height,
-                    ),
+                    src: normalizedCanvas.toDataURL("image/png"),
+                    width: Math.max(MIN_LAYER_SIZE, Math.round(layer.width)),
+                    height: Math.max(MIN_LAYER_SIZE, Math.round(layer.height)),
                   });
                 } catch {
                   resolve({
@@ -1739,13 +1813,14 @@ class EditorApplication {
             if (!imageFiles.length) return;
 
             if (!allowBatchUpload || imageFiles.length === 1) {
-              templateSession.batchImageLayerId = null;
-              templateSession.batchImageUploads = [];
+              clearTemplateBatchQueue();
               const file = imageFiles[0];
               if (!file || !customTemplateController) return;
 
               void customTemplateController
-                .applyImageFileToLayer(layer.id, file)
+                .applyImageFileToLayer(layer.id, file, {
+                  fitMode: getResolvedFitMode(),
+                })
                 .then((updated) => {
                   if (!updated) return;
                   refresh({
@@ -1775,8 +1850,6 @@ class EditorApplication {
             templateSession.batchImageUploads = uploads;
 
             layer.src = uploads[0].src;
-            layer.width = uploads[0].width;
-            layer.height = uploads[0].height;
             refresh({ rerenderOptions: true, rerenderLayersPanel: false });
             commitHistory();
             showTemplateToast(
@@ -1784,6 +1857,33 @@ class EditorApplication {
               { durationMs: 2200 },
             );
           };
+
+          const fitSelect = document.createElement("select");
+          fitSelect.className = "option-select";
+          [
+            ["stretch", "Stretch"],
+            ["contain", "Contain"],
+            ["cover", "Cover"],
+          ].forEach(([value, label]) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            fitSelect.appendChild(option);
+          });
+          fitSelect.value = getResolvedFitMode();
+          fitSelect.addEventListener("change", () => {
+            const nextMode = String(fitSelect.value || "stretch").toLowerCase();
+            binding.fitMode = nextMode;
+            layer.templateImageFitMode = nextMode;
+            if (templateSession.batchImageLayerId === layer.id) {
+              clearTemplateBatchQueue();
+              showTemplateToast("Batch queue cleared after fit mode change", {
+                durationMs: 1800,
+              });
+            }
+          });
+
+          block.appendChild(createOptionRow("Image Fit", fitSelect));
 
           imageInput.addEventListener("change", () => {
             const files = Array.from(imageInput.files || []);
