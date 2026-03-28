@@ -3891,7 +3891,7 @@ class EditorApplication {
     setupClearSelectionOnOutsideClick();
     setupSidePanelResize();
     setupBackNavigationBlock();
-    // setupCloseTabWarning();
+    setupCloseTabWarning();
 
     addLayerFlowController = createAddLayerFlowController({
       state,
