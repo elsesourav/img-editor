@@ -87,7 +87,10 @@ import {
 } from "./utils/image-canvas.js";
 
 // design log show color text "Welcome to Image Editor!" in console with colors from PRESET_COLORS
-console.log("\t\t%cWelcome to Image Editor! v1.0.0\t\t", "color: #007acc; font-weight: bold; font-size: 24px;");
+console.log(
+  "\t\t%cWelcome to Image Editor! v1.0.1\t\t",
+  "color: #007acc; font-weight: bold; font-size: 24px;",
+);
 
 /**
  * @typedef {Object} EditorLifecycle
@@ -645,6 +648,7 @@ class EditorApplication {
         buildLayerFilterString,
         getLayerShadowStyle,
         getLayerInsetShadow,
+        getLayerCornerRadius,
         getAncestorVisibleRectForRegion,
       });
     }

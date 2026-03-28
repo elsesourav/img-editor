@@ -350,9 +350,41 @@ export async function renderCompositeLayersToCanvas(
     buildLayerFilterString,
     getLayerShadowStyle,
     getLayerInsetShadow,
+    getLayerCornerRadius,
     getAncestorVisibleRectForRegion,
   },
 ) {
+  const normalizeHexColor = (value, fallback = "#FFFFFF") => {
+    const candidate = String(value || "").trim();
+    const withHash = candidate.startsWith("#") ? candidate : `#${candidate}`;
+    if (!/^#[0-9A-Fa-f]{6}$/.test(withHash)) {
+      return fallback;
+    }
+    return withHash.toUpperCase();
+  };
+
+  const addRoundedRectPath = (ctx, x, y, width, height, radii) => {
+    const w = Math.max(0, width);
+    const h = Math.max(0, height);
+    const maxRx = w / 2;
+    const maxRy = h / 2;
+    const lt = Math.max(0, Math.min(maxRx, maxRy, Number(radii.lt) || 0));
+    const rt = Math.max(0, Math.min(maxRx, maxRy, Number(radii.rt) || 0));
+    const rb = Math.max(0, Math.min(maxRx, maxRy, Number(radii.rb) || 0));
+    const lb = Math.max(0, Math.min(maxRx, maxRy, Number(radii.lb) || 0));
+
+    ctx.moveTo(x + lt, y);
+    ctx.lineTo(x + w - rt, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rt);
+    ctx.lineTo(x + w, y + h - rb);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rb, y + h);
+    ctx.lineTo(x + lb, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - lb);
+    ctx.lineTo(x, y + lt);
+    ctx.quadraticCurveTo(x, y, x + lt, y);
+    ctx.closePath();
+  };
+
   const loadedEntries = await Promise.all(
     layers.map(async (layer) => {
       const img = await loadImage(layer.src);
@@ -453,17 +485,48 @@ export async function renderCompositeLayersToCanvas(
     const drawY = (layer.y - regionRect.y) * scaleY;
     const drawWidth = layer.width * scaleX;
     const drawHeight = layer.height * scaleY;
+    const appliedBorderSize = Math.max(
+      0,
+      Math.round(Number(layer?.appliedBorder?.size) || 0),
+    );
+    const borderX = appliedBorderSize * scaleX;
+    const borderY = appliedBorderSize * scaleY;
+    const contentX = drawX;
+    const contentY = drawY;
+    const contentWidth = Math.max(1, drawWidth - borderX * 2);
+    const contentHeight = Math.max(1, drawHeight - borderY * 2);
+
+    let cornerRadii = { lt: 0, rt: 0, rb: 0, lb: 0 };
+    if (typeof getLayerCornerRadius === "function") {
+      const radius = getLayerCornerRadius(layer);
+      cornerRadii = {
+        lt: (Number(radius?.lt) || 0) * Math.min(scaleX, scaleY),
+        rt: (Number(radius?.rt) || 0) * Math.min(scaleX, scaleY),
+        rb: (Number(radius?.rb) || 0) * Math.min(scaleX, scaleY),
+        lb: (Number(radius?.lb) || 0) * Math.min(scaleX, scaleY),
+      };
+    }
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(clipX, clipY, clipWidth, clipHeight);
     ctx.clip();
+
+    ctx.beginPath();
+    addRoundedRectPath(ctx, contentX, contentY, contentWidth, contentHeight, {
+      lt: cornerRadii.lt,
+      rt: cornerRadii.rt,
+      rb: cornerRadii.rb,
+      lb: cornerRadii.lb,
+    });
+    ctx.clip();
+
     const layerOpacity = Number.isFinite(Number(layer.opacity))
       ? Math.max(0, Math.min(1, Number(layer.opacity)))
       : 1;
     ctx.globalAlpha = layerOpacity;
     ctx.filter = filterString;
-    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+    ctx.drawImage(img, contentX, contentY, contentWidth, contentHeight);
 
     const insetShadow = getLayerInsetShadow(layer);
     if (
@@ -472,12 +535,44 @@ export async function renderCompositeLayersToCanvas(
     ) {
       const shadowCanvas = buildInsetShadowCanvas(
         img,
-        drawWidth,
-        drawHeight,
+        contentWidth,
+        contentHeight,
         baseFilterString,
         insetShadow,
       );
-      ctx.drawImage(shadowCanvas, drawX, drawY, drawWidth, drawHeight);
+      ctx.drawImage(
+        shadowCanvas,
+        contentX,
+        contentY,
+        contentWidth,
+        contentHeight,
+      );
+    }
+
+    if (appliedBorderSize > 0) {
+      const borderColor = normalizeHexColor(
+        layer?.appliedBorder?.color,
+        "#FFFFFF",
+      );
+      ctx.filter = "none";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = Math.max(1, appliedBorderSize * Math.min(scaleX, scaleY));
+      ctx.beginPath();
+      addRoundedRectPath(
+        ctx,
+        contentX + ctx.lineWidth / 2,
+        contentY + ctx.lineWidth / 2,
+        Math.max(1, contentWidth - ctx.lineWidth),
+        Math.max(1, contentHeight - ctx.lineWidth),
+        {
+          lt: cornerRadii.lt,
+          rt: cornerRadii.rt,
+          rb: cornerRadii.rb,
+          lb: cornerRadii.lb,
+        },
+      );
+      ctx.stroke();
     }
     ctx.restore();
   }
