@@ -88,7 +88,7 @@ import {
 
 // design log show color text "Welcome to Image Editor!" in console with colors from PRESET_COLORS
 console.log(
-  "\t\t%cWelcome to Image Editor! v1.0.1\t\t",
+  "\t\t%cWelcome to Image Editor! v1.0.2\t\t",
   "color: #007acc; font-weight: bold; font-size: 24px;",
 );
 
@@ -855,29 +855,9 @@ class EditorApplication {
       refresh({ rerenderOptions: true, rerenderLayersPanel: false });
 
       try {
-        // Keep parent and descendants in lockstep before baking filter pixels.
+        // Keep parent and descendants in lockstep and commit exactly what is previewed.
+        // Do not rebake src here, otherwise live preview and post-apply output can drift.
         syncSelectedFiltersToChildren(selected);
-        const targets = getApplyFilterTargetLayers(selected);
-
-        for (const target of targets) {
-          ensureLayerDefaults(target);
-          const shadowStyle = getLayerShadowStyle(target);
-          const shouldBakeStroke =
-            shadowStyle.enabled &&
-            shadowStyle.resolvedMode === "object" &&
-            shadowStyle.strokeSize > 0;
-
-          const previousSrc = target.src;
-          const canvas = await renderFilteredLayerToCanvas(target);
-          target.src = canvas.toDataURL("image/png");
-          target.filters = getDefaultFiltersForLayerSize(target);
-          if (shouldBakeStroke && target.shadowStyle) {
-            target.shadowStyle.strokeSize = 0;
-          }
-
-          revokeBlobUrlIfNeeded(previousSrc);
-        }
-
         syncLinkedBackgroundFilters(selected);
         refresh();
         commitHistory();
