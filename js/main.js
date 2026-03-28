@@ -168,10 +168,15 @@ class EditorApplication {
       zoomReset,
       buttonZoomStep: BUTTON_ZOOM_STEP,
       wheelZoomStep: WHEEL_ZOOM_STEP,
+      getContentBounds: () => getBoundingRectForLayers(state.layers),
       onViewportUpdated: () => {
         refresh();
       },
     });
+
+    function fitEditorToContent() {
+      viewportController.fitToContent();
+    }
 
     const rotateController = createRotateController({
       state,
@@ -1467,7 +1472,8 @@ class EditorApplication {
 
       const valueInput = document.createElement("input");
       valueInput.className = "filter-value-input";
-      valueInput.type = "number";
+      valueInput.type = "text";
+      valueInput.inputMode = "decimal";
       valueInput.min = String(min);
       valueInput.max = String(max);
       valueInput.step = String(step);
@@ -1502,13 +1508,38 @@ class EditorApplication {
       });
 
       valueInput.addEventListener("input", () => {
-        syncFrom(valueInput.value, false);
+        const rawValue = String(valueInput.value || "").trim();
+        if (
+          !rawValue ||
+          rawValue === "-" ||
+          rawValue === "." ||
+          rawValue === "-."
+        ) {
+          return;
+        }
+
+        const parsed = Number(rawValue);
+        if (!Number.isFinite(parsed)) return;
+        const normalized = Math.min(max, Math.max(min, parsed));
+        slider.value = String(normalized);
+        onPreview(normalized);
       });
       valueInput.addEventListener("change", () => {
         syncFrom(valueInput.value, true);
       });
       valueInput.addEventListener("blur", () => {
-        displayValue(Number(slider.value));
+        const rawValue = String(valueInput.value || "").trim();
+        if (
+          !rawValue ||
+          rawValue === "-" ||
+          rawValue === "." ||
+          rawValue === "-."
+        ) {
+          displayValue(Number(slider.value));
+          return;
+        }
+
+        syncFrom(rawValue, false);
       });
 
       displayValue(Number(slider.value));
@@ -3815,7 +3846,7 @@ class EditorApplication {
       },
       onZoomIn: () => setEditorZoom(state.editorZoom + KEYBOARD_ZOOM_STEP),
       onZoomOut: () => setEditorZoom(state.editorZoom - KEYBOARD_ZOOM_STEP),
-      onZoomReset: () => setEditorZoom(1),
+      onZoomReset: () => fitEditorToContent(),
       isEyedropperActive: () => isEyedropperActive,
       onDisableEyedropper: () => {
         setEyedropperActive(false);
@@ -3935,12 +3966,21 @@ class EditorApplication {
       stage,
       marquee,
       refresh,
+      onViewportPanBy: (deltaX, deltaY) => {
+        viewportController.panBy(deltaX, deltaY, { notify: false });
+        updateSelectionBox();
+      },
       onCommit: commitHistory,
       onTextLayerTripleClick: openTextEditorFromCanvas,
     });
 
     if (!state.layers.length) {
-      void addLayerFlowController.openFlow({ startup: true });
+      void addLayerFlowController.openFlow({ startup: true }).then(() => {
+        if (!state.layers.length) return;
+        fitEditorToContent();
+      });
+    } else {
+      fitEditorToContent();
     }
     attachCropSelection({
       stage,

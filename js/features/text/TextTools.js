@@ -7,15 +7,6 @@ function normalizeHexColor(value, fallback = "#000000") {
   return withHash.toUpperCase();
 }
 
-function escapeXml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
 const FONT_GROUPS = [
   {
     label: "Sans Serif",
@@ -133,15 +124,27 @@ function createTextToolsRuntime({
       Math.ceil(safeLines.length * lineHeight + paddingY * 2),
     );
 
-    const textNodes = safeLines
-      .map((line, index) => {
-        const y = paddingY + Math.round(meta.fontSize) + index * lineHeight;
-        return `<text x="${paddingX}" y="${y}" fill="${meta.color}" font-family="${escapeXml(meta.fontFamily)}" font-size="${Math.round(meta.fontSize)}" font-weight="${Math.round(meta.fontWeight)}">${escapeXml(line)}</text>`;
-      })
-      .join("");
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Canvas is not available.");
+    }
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${textNodes}</svg>`;
-    const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = meta.color;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = fontSpec;
+
+    for (let index = 0; index < safeLines.length; index += 1) {
+      const line = safeLines[index];
+      const y = paddingY + Math.round(meta.fontSize) + index * lineHeight;
+      ctx.fillText(line, paddingX, y);
+    }
+
+    const src = canvas.toDataURL("image/png");
 
     return { src, width, height, meta };
   }

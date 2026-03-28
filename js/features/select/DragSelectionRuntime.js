@@ -23,6 +23,7 @@ const SNAP_THRESHOLD_PX = 8;
  * @property {HTMLElement} stage - Stage element that receives pointer events.
  * @property {HTMLElement} marquee - Marquee rectangle element.
  * @property {(opts?: {rerenderOptions?: boolean, rerenderLayersPanel?: boolean}) => void} refresh - UI refresh callback.
+ * @property {(deltaX:number,deltaY:number)=>void} [onViewportPanBy] - Called while dragging empty canvas to pan viewport.
  * @property {() => void} [onCommit] - Called when a drag interaction changes state.
  * @property {(layerId: string) => void} [onTextLayerTripleClick] - Called on text layer triple-click.
  */
@@ -38,12 +39,14 @@ export class DragSelectionRuntime {
     stage,
     marquee,
     refresh,
+    onViewportPanBy = () => {},
     onCommit = () => {},
     onTextLayerTripleClick = () => {},
   }) {
     this.stage = stage;
     this.marquee = marquee;
     this.refresh = refresh;
+    this.onViewportPanBy = onViewportPanBy;
     this.onCommit = onCommit;
     this.onTextLayerTripleClick = onTextLayerTripleClick;
 
@@ -369,42 +372,17 @@ export class DragSelectionRuntime {
     }
 
     if (this.dragAll) {
-      const deltaX = point.x - this.dragAll.startX;
-      const deltaY = point.y - this.dragAll.startY;
+      this.hideSnapGuides();
+      const deltaClientX = clientX - this.dragAll.startClientX;
+      const deltaClientY = clientY - this.dragAll.startClientY;
+      const panDeltaX = deltaClientX - this.dragAll.lastDeltaClientX;
+      const panDeltaY = deltaClientY - this.dragAll.lastDeltaClientY;
+      this.dragAll.lastDeltaClientX = deltaClientX;
+      this.dragAll.lastDeltaClientY = deltaClientY;
 
-      const snappedGroup = this.resolveSnappedPosition(
-        {
-          x: this.dragAll.bounds.x + deltaX,
-          y: this.dragAll.bounds.y + deltaY,
-          width: this.dragAll.bounds.width,
-          height: this.dragAll.bounds.height,
-        },
-        this.collectSnapTargets(new Set(state.layers.map((layer) => layer.id))),
-        SNAP_THRESHOLD_PX / Math.max(0.001, Number(state.editorZoom) || 1),
-      );
-      const snappedDeltaX = snappedGroup.x - this.dragAll.bounds.x;
-      const snappedDeltaY = snappedGroup.y - this.dragAll.bounds.y;
-
-      for (const snapshot of this.dragAll.layers) {
-        const layer = getLayerById(snapshot.id);
-        if (!layer) continue;
-        layer.x = snapshot.x + snappedDeltaX;
-        layer.y = snapshot.y + snappedDeltaY;
+      if (panDeltaX !== 0 || panDeltaY !== 0) {
+        this.onViewportPanBy(panDeltaX, panDeltaY);
       }
-
-      if (state.cropSelection) {
-        const selectedSnap = this.dragAll.layers.find(
-          (layer) => layer.id === state.cropSelection.layerId,
-        );
-        if (selectedSnap) {
-          state.cropSelection.x = selectedSnap.x + snappedDeltaX;
-          state.cropSelection.y = selectedSnap.y + snappedDeltaY;
-        }
-      }
-
-      this.renderSnapGuides(snappedGroup.snapX, snappedGroup.snapY);
-      this.didMutate = true;
-      this.refreshDuringDrag();
       return;
     }
 
@@ -570,35 +548,11 @@ export class DragSelectionRuntime {
     }
 
     if (isMoveMode) {
-      const bounds = (() => {
-        if (!state.layers.length) {
-          return { x: 0, y: 0, width: 1, height: 1 };
-        }
-        const left = Math.min(...state.layers.map((layer) => layer.x));
-        const top = Math.min(...state.layers.map((layer) => layer.y));
-        const right = Math.max(
-          ...state.layers.map((layer) => layer.x + layer.width),
-        );
-        const bottom = Math.max(
-          ...state.layers.map((layer) => layer.y + layer.height),
-        );
-        return {
-          x: left,
-          y: top,
-          width: Math.max(1, right - left),
-          height: Math.max(1, bottom - top),
-        };
-      })();
-
       this.dragAll = {
-        startX: point.x,
-        startY: point.y,
-        bounds,
-        layers: state.layers.map((layer) => ({
-          id: layer.id,
-          x: layer.x,
-          y: layer.y,
-        })),
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        lastDeltaClientX: 0,
+        lastDeltaClientY: 0,
       };
       this.marquee.style.display = "none";
       this.beginPointerTracking(event);

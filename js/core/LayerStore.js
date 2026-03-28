@@ -147,7 +147,7 @@ export function getLayerShadowStyle(layer) {
   const color = normalizeHexColor(current.color, "#000000");
   const strokeColor = normalizeHexColor(current.strokeColor, "#000000");
   const opacity = normalizeFilterNumber(current.opacity, 45, 0, 100);
-  const strokeSize = normalizeFilterNumber(current.strokeSize, 0, 0, 64);
+  const strokeSize = normalizeFilterNumber(current.strokeSize, 0, 0, 20);
   const strokeOpacity = normalizeFilterNumber(
     current.strokeOpacity,
     100,
@@ -517,6 +517,67 @@ function getActiveCropForLayer(layer) {
   return state.cropSelection;
 }
 
+function getLayerEffectPadding(layer) {
+  const shadow = getLayerShadowStyle(layer);
+  if (!shadow.enabled || shadow.resolvedMode !== "object") {
+    return { x: 0, y: 0 };
+  }
+
+  const stroke = Math.max(0, Number(shadow.strokeSize) || 0);
+  const blur = Math.max(0, Number(shadow.blur) || 0);
+  const offsetX = Math.abs(Number(shadow.x) || 0);
+  const offsetY = Math.abs(Number(shadow.y) || 0);
+  const padX = Math.ceil(stroke + blur + offsetX);
+  const padY = Math.ceil(stroke + blur + offsetY);
+
+  return {
+    x: padX,
+    y: padY,
+  };
+}
+
+function buildStrokeDropShadowParts(size, color, { isTextLayer = false } = {}) {
+  const strokeSize = Math.max(0, Number(size) || 0);
+  if (strokeSize <= 0) return [];
+
+  // Text layers are much more expensive with many filter passes.
+  // Use a compact outline approximation for smooth interaction.
+  if (isTextLayer) {
+    const s = Number(strokeSize.toFixed(3));
+    const half = Number((strokeSize * 0.5).toFixed(3));
+    const parts = [
+      `drop-shadow(${s}px 0 0 ${color})`,
+      `drop-shadow(${-s}px 0 0 ${color})`,
+      `drop-shadow(0 ${s}px 0 ${color})`,
+      `drop-shadow(0 ${-s}px 0 ${color})`,
+    ];
+
+    if (strokeSize >= 1.5) {
+      parts.push(`drop-shadow(${half}px ${half}px 0 ${color})`);
+      parts.push(`drop-shadow(${-half}px ${half}px 0 ${color})`);
+      parts.push(`drop-shadow(${half}px ${-half}px 0 ${color})`);
+      parts.push(`drop-shadow(${-half}px ${-half}px 0 ${color})`);
+    }
+
+    return parts;
+  }
+
+  const angles = strokeSize <= 2 ? 8 : strokeSize <= 8 ? 12 : 16;
+  const seen = new Set();
+  const parts = [];
+  for (let index = 0; index < angles; index += 1) {
+    const angle = (Math.PI * 2 * index) / angles;
+    const dx = Number((Math.cos(angle) * strokeSize).toFixed(3));
+    const dy = Number((Math.sin(angle) * strokeSize).toFixed(3));
+    const key = `${dx},${dy}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(`drop-shadow(${dx}px ${dy}px 0 ${color})`);
+  }
+
+  return parts;
+}
+
 function getLayerCanvasBounds(layer, crop) {
   const useCropExpandedCanvas = Boolean(layer.showOutsideBackground && crop);
   const useRotateExpandedCanvas =
@@ -527,12 +588,13 @@ function getLayerCanvasBounds(layer, crop) {
   const useExpandedCanvas = useCropExpandedCanvas || useRotateExpandedCanvas;
 
   if (!useExpandedCanvas) {
+    const effectPadding = getLayerEffectPadding(layer);
     return {
       useExpandedCanvas,
-      left: layer.x,
-      top: layer.y,
-      width: layer.width,
-      height: layer.height,
+      left: layer.x - effectPadding.x,
+      top: layer.y - effectPadding.y,
+      width: layer.width + effectPadding.x * 2,
+      height: layer.height + effectPadding.y * 2,
     };
   }
 
@@ -732,16 +794,12 @@ function buildLayerImage(layer, bounds, { usePreviewFill = false } = {}) {
 
   if (layerShadow.enabled && layerShadow.resolvedMode === "object") {
     if (layerShadow.strokeSize > 0) {
-      const s = layerShadow.strokeSize;
-      const c = layerShadow.strokeCssColor;
-      filterParts.push(`drop-shadow(${s}px 0 0 ${c})`);
-      filterParts.push(`drop-shadow(${-s}px 0 0 ${c})`);
-      filterParts.push(`drop-shadow(0 ${s}px 0 ${c})`);
-      filterParts.push(`drop-shadow(0 ${-s}px 0 ${c})`);
-      filterParts.push(`drop-shadow(${s}px ${s}px 0 ${c})`);
-      filterParts.push(`drop-shadow(${-s}px ${s}px 0 ${c})`);
-      filterParts.push(`drop-shadow(${s}px ${-s}px 0 ${c})`);
-      filterParts.push(`drop-shadow(${-s}px ${-s}px 0 ${c})`);
+      const parts = buildStrokeDropShadowParts(
+        layerShadow.strokeSize,
+        layerShadow.strokeCssColor,
+        { isTextLayer: Boolean(layer.textMeta) },
+      );
+      filterParts.push(...parts);
     }
     filterParts.push(
       `drop-shadow(${layerShadow.x}px ${layerShadow.y}px ${layerShadow.blur}px ${layerShadow.cssColor})`,

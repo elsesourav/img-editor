@@ -35,8 +35,9 @@ class EditorViewportController {
     zoomReset,
     buttonZoomStep,
     wheelZoomStep,
-    minZoom = 0.5,
+    minZoom = 0.02,
     maxZoom = 3,
+    getContentBounds,
     onViewportUpdated,
   }) {
     this.state = state;
@@ -48,7 +49,72 @@ class EditorViewportController {
     this.wheelZoomStep = wheelZoomStep;
     this.minZoom = minZoom;
     this.maxZoom = maxZoom;
+    this.getContentBounds = getContentBounds;
     this.onViewportUpdated = onViewportUpdated;
+  }
+
+  /**
+   * @return {{x:number,y:number,width:number,height:number}|null}
+   */
+  resolveContentBounds() {
+    if (typeof this.getContentBounds !== "function") {
+      return null;
+    }
+
+    const bounds = this.getContentBounds();
+    if (!bounds) return null;
+
+    const width = Number(bounds.width);
+    const height = Number(bounds.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+
+    return {
+      x: Number(bounds.x) || 0,
+      y: Number(bounds.y) || 0,
+      width,
+      height,
+    };
+  }
+
+  /**
+   * Fits viewport to all content bounds, centered with padding.
+   * @param {{padding?:number,maxZoom?:number}} options
+   * @return {void}
+   */
+  fitToContent({ padding = 28, maxZoom = 1 } = {}) {
+    const bounds = this.resolveContentBounds();
+    if (!bounds) {
+      this.setZoom(1);
+      return;
+    }
+
+    const stageWidth = Math.max(1, this.stage.clientWidth || 1);
+    const stageHeight = Math.max(1, this.stage.clientHeight || 1);
+    const innerWidth = Math.max(1, stageWidth - padding * 2);
+    const innerHeight = Math.max(1, stageHeight - padding * 2);
+
+    const fitZoomByWidth = innerWidth / bounds.width;
+    const fitZoomByHeight = innerHeight / bounds.height;
+    const rawFitZoom = Math.min(fitZoomByWidth, fitZoomByHeight);
+    const fitZoom = clampZoom(
+      Math.min(maxZoom, rawFitZoom),
+      this.minZoom,
+      this.maxZoom,
+    );
+
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    this.state.editorZoom = fitZoom;
+    this.state.editorOffsetX = stageWidth / 2 - centerX * fitZoom;
+    this.state.editorOffsetY = stageHeight / 2 - centerY * fitZoom;
+
+    this.applyViewportTransform();
+    this.triggerViewportUpdate();
   }
 
   /**
@@ -64,15 +130,22 @@ class EditorViewportController {
    * @return {void}
    */
   applyViewportTransform() {
-    this.stage.style.setProperty("--editor-zoom", String(this.state.editorZoom));
-    this.stage.style.setProperty("--editor-offset-x", `${this.state.editorOffsetX}px`);
-    this.stage.style.setProperty("--editor-offset-y", `${this.state.editorOffsetY}px`);
+    this.stage.style.setProperty(
+      "--editor-zoom",
+      String(this.state.editorZoom),
+    );
+    this.stage.style.setProperty(
+      "--editor-offset-x",
+      `${this.state.editorOffsetX}px`,
+    );
+    this.stage.style.setProperty(
+      "--editor-offset-y",
+      `${this.state.editorOffsetY}px`,
+    );
 
     const gridSize = 32 * this.state.editorZoom;
-    const gridOffsetX =
-      ((this.state.editorOffsetX % gridSize) + gridSize) % gridSize;
-    const gridOffsetY =
-      ((this.state.editorOffsetY % gridSize) + gridSize) % gridSize;
+    const gridOffsetX = this.state.editorOffsetX;
+    const gridOffsetY = this.state.editorOffsetY;
     this.stage.style.setProperty("--grid-size", `${gridSize}px`);
     this.stage.style.setProperty("--grid-offset-x", `${gridOffsetX}px`);
     this.stage.style.setProperty("--grid-offset-y", `${gridOffsetY}px`);
@@ -115,6 +188,26 @@ class EditorViewportController {
   }
 
   /**
+   * Pans viewport by screen-space delta without changing zoom.
+   * @param {number} deltaX
+   * @param {number} deltaY
+   * @param {{notify?: boolean}} options
+   * @return {void}
+   */
+  panBy(deltaX, deltaY, { notify = false } = {}) {
+    const dx = Number(deltaX) || 0;
+    const dy = Number(deltaY) || 0;
+    if (dx === 0 && dy === 0) return;
+
+    this.state.editorOffsetX += dx;
+    this.state.editorOffsetY += dy;
+    this.applyViewportTransform();
+    if (notify) {
+      this.triggerViewportUpdate();
+    }
+  }
+
+  /**
    * @param {number} clientX
    * @param {number} clientY
    * @return {{x:number,y:number}}
@@ -144,7 +237,7 @@ class EditorViewportController {
     });
 
     this.zoomReset.addEventListener("click", () => {
-      this.setZoom(1);
+      this.fitToContent();
     });
 
     this.stage.addEventListener(

@@ -225,28 +225,63 @@ export async function renderFilteredLayerToCanvas(
   return canvas;
 }
 
-export function buildObjectStrokeFilterChain(strokeSize, strokeColor) {
+export function buildObjectStrokeFilterChain(
+  strokeSize,
+  strokeColor,
+  { isTextLayer = false } = {},
+) {
   const size = Math.max(0, Number(strokeSize) || 0);
   if (size <= 0) return "";
   const color = String(strokeColor || "#000000");
-  return [
-    `drop-shadow(${size}px 0 0 ${color})`,
-    `drop-shadow(${-size}px 0 0 ${color})`,
-    `drop-shadow(0 ${size}px 0 ${color})`,
-    `drop-shadow(0 ${-size}px 0 ${color})`,
-    `drop-shadow(${size}px ${size}px 0 ${color})`,
-    `drop-shadow(${-size}px ${size}px 0 ${color})`,
-    `drop-shadow(${size}px ${-size}px 0 ${color})`,
-    `drop-shadow(${-size}px ${-size}px 0 ${color})`,
-  ].join(" ");
+
+  if (isTextLayer) {
+    const s = Number(size.toFixed(3));
+    const half = Number((size * 0.5).toFixed(3));
+    const parts = [
+      `drop-shadow(${s}px 0 0 ${color})`,
+      `drop-shadow(${-s}px 0 0 ${color})`,
+      `drop-shadow(0 ${s}px 0 ${color})`,
+      `drop-shadow(0 ${-s}px 0 ${color})`,
+    ];
+
+    if (size >= 1.5) {
+      parts.push(`drop-shadow(${half}px ${half}px 0 ${color})`);
+      parts.push(`drop-shadow(${-half}px ${half}px 0 ${color})`);
+      parts.push(`drop-shadow(${half}px ${-half}px 0 ${color})`);
+      parts.push(`drop-shadow(${-half}px ${-half}px 0 ${color})`);
+    }
+
+    return parts.join(" ");
+  }
+
+  const parts = [];
+  const seen = new Set();
+  const angles = size <= 2 ? 8 : size <= 8 ? 12 : 16;
+
+  for (let index = 0; index < angles; index += 1) {
+    const angle = (Math.PI * 2 * index) / angles;
+    const dx = Number((Math.cos(angle) * size).toFixed(3));
+    const dy = Number((Math.sin(angle) * size).toFixed(3));
+    const key = `${dx},${dy}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(`drop-shadow(${dx}px ${dy}px 0 ${color})`);
+  }
+
+  return parts.join(" ");
 }
 
 export function bakeObjectStrokeIntoCanvas(
   sourceCanvas,
   strokeSize,
   strokeColor,
+  options,
 ) {
-  const filterChain = buildObjectStrokeFilterChain(strokeSize, strokeColor);
+  const filterChain = buildObjectStrokeFilterChain(
+    strokeSize,
+    strokeColor,
+    options,
+  );
   if (!filterChain) return sourceCanvas;
 
   const output = document.createElement("canvas");
@@ -300,6 +335,7 @@ export async function buildUpscaleSourceDrawable(layer, getLayerShadowStyle) {
       base,
       shadowStyle.strokeSize,
       shadowStyle.strokeCssColor || shadowStyle.strokeColor,
+      { isTextLayer: Boolean(layer.textMeta) },
     ),
     bakedStroke: true,
   };

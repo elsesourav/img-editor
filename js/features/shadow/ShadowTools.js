@@ -134,17 +134,22 @@ function createShadowToolsRuntime({
       min,
       max,
       step = 1,
-      { formatValue = (nextValue) => String(Math.round(nextValue)) } = {},
+      {
+        formatValue = (nextValue) => String(Math.round(nextValue)),
+        toUiValue = (rawValue) => rawValue,
+        fromUiValue = (uiValue) => uiValue,
+      } = {},
     ) => {
+      const rawValue = Number(selected.shadowStyle?.[key]) || 0;
       const control = createFilterControl({
         min,
         max,
         step,
-        value: Number(selected.shadowStyle?.[key]) || 0,
+        value: toUiValue(rawValue),
         formatValue,
-        onPreview: (nextValue) => {
+        onPreview: (uiValue) => {
           startShadowDraft(selected);
-          selected.shadowStyle[key] = nextValue;
+          selected.shadowStyle[key] = fromUiValue(uiValue);
           refresh({ rerenderOptions: false, rerenderLayersPanel: false });
         },
         onCommit: () => {},
@@ -175,8 +180,10 @@ function createShadowToolsRuntime({
     strokeCaption.textContent = "Stroke";
     optionsPanel.appendChild(strokeCaption);
 
-    addShadowControl("Size", "strokeSize", 0, 64, 0.1, {
-      formatValue: (nextValue) => Number(nextValue).toFixed(1),
+    addShadowControl("Size", "strokeSize", 0, 200, 1, {
+      formatValue: (nextValue) => String(Math.round(nextValue)),
+      toUiValue: (rawValue) => rawValue * 10,
+      fromUiValue: (uiValue) => uiValue / 10,
     });
 
     const strokeColorInput = document.createElement("input");
